@@ -10,6 +10,8 @@ interface MapProps {
   districts: District[];
   onPointSelected: (point: [number, number]) => void;
   selectedPoint: [number, number] | null;
+  selectedAddress: string | null;
+  radiusMeters: number;
   loading: boolean;
 }
 
@@ -21,6 +23,8 @@ export const Map: React.FC<MapProps> = ({
   districts,
   onPointSelected,
   selectedPoint,
+  selectedAddress,
+  radiusMeters,
   loading,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -29,6 +33,12 @@ export const Map: React.FC<MapProps> = ({
   const districtLayersGroup = useRef<L.FeatureGroup>(new L.FeatureGroup());
   const districtLabelsGroup = useRef<L.FeatureGroup>(new L.FeatureGroup());
   const selectedPointMarker = useRef<L.Marker | null>(null);
+  const searchRadiusCircle = useRef<L.Circle | null>(null);
+  const onPointSelectedRef = useRef(onPointSelected);
+
+  useEffect(() => {
+    onPointSelectedRef.current = onPointSelected;
+  }, [onPointSelected]);
 
   // Initialize map
   useEffect(() => {
@@ -51,14 +61,14 @@ export const Map: React.FC<MapProps> = ({
       // Map click handler
       map.current.on('click', (e) => {
         const { lat, lng } = e.latlng;
-        onPointSelected([lng, lat]);
+        onPointSelectedRef.current([lng, lat]);
       });
     }
 
     return () => {
       // Don't destroy map on unmount
     };
-  }, [onPointSelected]);
+  }, []);
 
   // Render districts
   useEffect(() => {
@@ -70,27 +80,30 @@ export const Map: React.FC<MapProps> = ({
     districts.forEach((district) => {
       if (district.geometry.type === 'Polygon' || district.geometry.type === 'MultiPolygon') {
         const geoJsonLayer = L.geoJSON(district.geometry as any, {
+          smoothFactor: 0.4,
           style: {
             color: '#333333',
-            weight: 2.5,
-            opacity: 0.85,
+            weight: 2,
+            opacity: 0.75,
             fillColor: district.color || '#95a5a6',
             fillOpacity: 0.35,
           },
           onEachFeature: (_feature, layer) => {
-            layer.bindPopup(`<strong>${district.name}</strong>`);
             layer.on('mouseover', () => {
-              layer.setStyle({ weight: 4, fillOpacity: 0.45 });
+              (layer as any).setStyle({ weight: 3, fillOpacity: 0.45 });
             });
             layer.on('mouseout', () => {
-              layer.setStyle({ weight: 2.5, fillOpacity: 0.35 });
+              (layer as any).setStyle({ weight: 2, fillOpacity: 0.35 });
             });
             layer.on('click', (e: any) => {
+              if (e.originalEvent) {
+                L.DomEvent.stopPropagation(e.originalEvent);
+              }
               const { lat, lng } = e.latlng;
-              onPointSelected([lng, lat]);
+              onPointSelectedRef.current([lng, lat]);
             });
           },
-        });
+        } as L.GeoJSONOptions & { smoothFactor: number });
 
         districtLayersGroup.current.addLayer(geoJsonLayer);
 
@@ -168,10 +181,36 @@ export const Map: React.FC<MapProps> = ({
         icon,
       }).addTo(map.current);
 
+      if (selectedAddress) {
+        selectedPointMarker.current.bindPopup(escapeHtml(selectedAddress)).openPopup();
+      }
+
       const currentZoom = map.current.getZoom() ?? ZOOM_LEVEL;
       map.current.flyTo([selectedPoint[1], selectedPoint[0]], currentZoom);
     }
-  }, [selectedPoint]);
+  }, [selectedAddress, selectedPoint]);
+
+  // Update search radius
+  useEffect(() => {
+    if (!map.current) return;
+
+    if (searchRadiusCircle.current) {
+      map.current.removeLayer(searchRadiusCircle.current);
+      searchRadiusCircle.current = null;
+    }
+
+    if (selectedPoint) {
+      searchRadiusCircle.current = L.circle([selectedPoint[1], selectedPoint[0]], {
+        radius: radiusMeters,
+        color: '#1f78d1',
+        weight: 2,
+        opacity: 0.8,
+        fillColor: '#1f78d1',
+        fillOpacity: 0.1,
+        interactive: false,
+      }).addTo(map.current);
+    }
+  }, [radiusMeters, selectedPoint]);
 
   function getPolygonCentroid(geometry: any): [number, number] | null {
     if (geometry.type !== 'Polygon') return null;
@@ -186,6 +225,19 @@ export const Map: React.FC<MapProps> = ({
     });
 
     return [sumX / coords.length, sumY / coords.length];
+  }
+
+  function escapeHtml(value: string): string {
+    return value.replace(/[&<>"']/g, (char) => {
+      const entities: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      };
+      return entities[char];
+    });
   }
 
   return (

@@ -39,6 +39,7 @@ export interface OSRMResponse {
 
 export interface MapState {
   selectedPoint: [number, number] | null;
+  selectedAddress: string | null;
   selectedServices: Service[];
   loading: boolean;
   error: string | null;

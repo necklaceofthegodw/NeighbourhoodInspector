@@ -7,13 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "fetch:districts": "node ./scripts/fetch-katowice-geojson.mjs"
   },
   "dependencies": {
     "@types/geojson": "^7946.0.16",
     "@types/leaflet": "^1.9.21",
     "axios": "^1.18.1",
     "geojson": "^0.5.0",
+    "osmtogeojson": "^2.1.0",
     "leaflet": "^1.9.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

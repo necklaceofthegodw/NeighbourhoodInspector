@@ -1,31 +1,33 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { Map } from './components/Map';
 import { Sidebar } from './components/Sidebar';
 import type { Service, District, MapState } from './types';
-import { osrmClient } from './services/osrm-client';
+import { geocodingClient } from './services/geocoding-client';
 import { AccessibilityCalculator } from './utils/accessibility-calculator';
-import { generateSampleServices, generateSampleDistricts } from './utils/sample-data';
+import { katowiceDistricts } from './data/katowice-districts';
+import { generateSampleServices } from './utils/sample-data';
 import './App.css';
+
+const DEFAULT_DISTRICT_COLOR = '#95a5a6';
+const WALKING_SPEED_METERS_PER_SECOND = 1.4;
 
 function App() {
   const [mapState, setMapState] = useState<MapState>({
     selectedPoint: null,
+    selectedAddress: null,
     selectedServices: [],
     loading: false,
     error: null,
   });
 
   const [services, setServices] = useState<Service[]>([]);
-  const [districts, setDistricts] = useState<District[]>([]);
+  const [districts, setDistricts] = useState<District[]>(katowiceDistricts);
   const [accessibilityIndex, setAccessibilityIndex] = useState(0);
   const [radiusMeters, setRadiusMeters] = useState(1500);
   const [lastEnrichedServices, setLastEnrichedServices] = useState<Service[]>([]);
 
   // Initialize data
   useEffect(() => {
-    const sampleDistricts = generateSampleDistricts();
-    setDistricts(sampleDistricts);
-
     // Load real Katowice services from public/katowice-services.json
     fetch('/katowice-services.json')
       .then((response) => {
@@ -43,57 +45,59 @@ function App() {
       });
   }, []);
 
+  useEffect(() => {
+    setDistricts(colorDistrictsByAccessibility(katowiceDistricts, services, radiusMeters));
+  }, [radiusMeters, services]);
+
   // Handle point selection
-  const filterServicesByRadius = (servicesToFilter: Service[], radius: number) => {
+  const filterServicesByRadius = useCallback((servicesToFilter: Service[], radius: number) => {
     const withinRadius = servicesToFilter.filter((s) => {
       const distance = s.distance ?? s.straightDistance;
       return distance !== undefined && distance <= radius;
     });
 
     return withinRadius.sort((a, b) => (a.distance ?? a.straightDistance ?? Infinity) - (b.distance ?? b.straightDistance ?? Infinity));
-  };
+  }, []);
 
-  const handlePointSelected = async (point: [number, number]) => {
-    setMapState((prev) => ({ ...prev, selectedPoint: point, loading: true, error: null }));
+  const handlePointSelected = useCallback((point: [number, number]) => {
+    const selectedPointKey = getPointKey(point);
+
+    setMapState((prev) => ({
+      ...prev,
+      selectedPoint: point,
+      selectedAddress: 'Szukam adresu...',
+      loading: true,
+      error: null,
+    }));
+
+    geocodingClient.reverseGeocode(point).then((resolvedAddress) => {
+      setMapState((prev) => {
+        if (!prev.selectedPoint || getPointKey(prev.selectedPoint) !== selectedPointKey) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          selectedAddress: resolvedAddress || getNearestKnownAddress(point, services),
+        };
+      });
+    });
 
     try {
-      // Get distances from selected point to all services
-      const enrichedServices = await osrmClient.getDistancesToServices(point, services);
+      const enrichedServices = enrichServicesWithStraightLineDistances(point, services);
       setLastEnrichedServices(enrichedServices);
 
       const validServices = filterServicesByRadius(enrichedServices, radiusMeters);
-      const nearestServices = validServices.slice(0, 30);
       const index = AccessibilityCalculator.calculateIndex(validServices);
 
       setMapState((prev) => ({
         ...prev,
-        selectedServices: nearestServices,
+        selectedServices: validServices,
         loading: false,
       }));
 
       setAccessibilityIndex(index);
 
-      // Update district colors based on accessibility near this point
-      const updatedDistricts = districts.map((district) => {
-        // In a real app, we'd calculate accessibility for each district center
-        const districtCenter = getCenterOfGeometry(district.geometry);
-        const districtServices = enrichedServices.filter(
-          (s) =>
-            s.distance !== undefined &&
-            Math.hypot(s.coordinates[0] - districtCenter[0], s.coordinates[1] - districtCenter[1]) < 0.02
-        );
-        const districtIndex = AccessibilityCalculator.calculateIndex(districtServices);
-        const level = AccessibilityCalculator.getAccessibilityLevel(districtIndex);
-        const color = AccessibilityCalculator.getAccessibilityColor(level);
-
-        return {
-          ...district,
-          accessibilityIndex: districtIndex,
-          color,
-        };
-      });
-
-      setDistricts(updatedDistricts);
     } catch (error) {
       console.error('Error calculating distances:', error);
       setMapState((prev) => ({
@@ -102,7 +106,7 @@ function App() {
         error: 'Failed to calculate distances',
       }));
     }
-  };
+  }, [filterServicesByRadius, radiusMeters, services]);
 
   const handleRadiusChange = (newRadius: number) => {
     setRadiusMeters(newRadius);
@@ -112,12 +116,11 @@ function App() {
     }
 
     const validServices = filterServicesByRadius(lastEnrichedServices, newRadius);
-    const nearestServices = validServices.slice(0, 30);
     const index = AccessibilityCalculator.calculateIndex(validServices);
 
     setMapState((prev) => ({
       ...prev,
-      selectedServices: nearestServices,
+      selectedServices: validServices,
     }));
     setAccessibilityIndex(index);
   };
@@ -126,6 +129,7 @@ function App() {
     setMapState((prev) => ({
       ...prev,
       selectedPoint: null,
+      selectedAddress: null,
       selectedServices: [],
     }));
   };
@@ -137,6 +141,8 @@ function App() {
         districts={districts}
         onPointSelected={handlePointSelected}
         selectedPoint={mapState.selectedPoint}
+        selectedAddress={mapState.selectedAddress}
+        radiusMeters={radiusMeters}
         loading={mapState.loading}
       />
 
@@ -154,23 +160,119 @@ function App() {
   );
 }
 
-/**
- * Get center point of a geometry
- */
-function getCenterOfGeometry(geometry: any): [number, number] {
-  if (geometry.type === 'Point') {
-    return geometry.coordinates;
-  } else if (geometry.type === 'Polygon') {
-    const coords = geometry.coordinates[0];
-    let sumLon = 0,
-      sumLat = 0;
-    coords.forEach((coord: [number, number]) => {
-      sumLon += coord[0];
-      sumLat += coord[1];
-    });
-    return [sumLon / coords.length, sumLat / coords.length];
+function colorDistrictsByAccessibility(
+  districtsToColor: District[],
+  servicesToUse: Service[],
+  radiusMeters: number
+): District[] {
+  if (servicesToUse.length === 0) {
+    return districtsToColor.map((district) => ({
+      ...district,
+      accessibilityIndex: 0,
+      color: DEFAULT_DISTRICT_COLOR,
+      serviceCount: 0,
+      avgDistance: 0,
+    }));
   }
-  return [19.0238, 50.2645]; // default Katowice center
+
+  return districtsToColor.map((district) => {
+    const center = getCenterOfGeometry(district.geometry);
+    const nearbyServices = servicesToUse
+      .map((service) => {
+        const distance = haversineDistance(center, service.coordinates);
+        return {
+          ...service,
+          distance,
+          straightDistance: distance,
+        };
+      })
+      .filter((service) => service.distance <= radiusMeters);
+
+    const accessibilityIndex = AccessibilityCalculator.calculateIndex(nearbyServices);
+    const accessibilityLevel = AccessibilityCalculator.getAccessibilityLevel(accessibilityIndex);
+    const totalDistance = nearbyServices.reduce((sum, service) => sum + (service.distance ?? 0), 0);
+
+    return {
+      ...district,
+      accessibilityIndex,
+      color: AccessibilityCalculator.getAccessibilityColor(accessibilityLevel),
+      serviceCount: nearbyServices.length,
+      avgDistance: nearbyServices.length > 0 ? totalDistance / nearbyServices.length : 0,
+    };
+  });
+}
+
+function getCenterOfGeometry(geometry: District['geometry']): [number, number] {
+  if (geometry.type === 'Point') {
+    return geometry.coordinates as [number, number];
+  }
+
+  const points = getGeometryPoints(geometry);
+  if (points.length === 0) {
+    return [19.0238, 50.2645];
+  }
+
+  const [sumLon, sumLat] = points.reduce(
+    ([lonAcc, latAcc], [lon, lat]) => [lonAcc + lon, latAcc + lat],
+    [0, 0]
+  );
+
+  return [sumLon / points.length, sumLat / points.length];
+}
+
+function getGeometryPoints(geometry: District['geometry']): [number, number][] {
+  if (geometry.type === 'Polygon') {
+    return (geometry.coordinates as [number, number][][]).flat();
+  }
+
+  if (geometry.type === 'MultiPolygon') {
+    return (geometry.coordinates as [number, number][][][]).flat(2);
+  }
+
+  return [];
+}
+
+function haversineDistance(from: [number, number], to: [number, number]): number {
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const [lon1, lat1] = from;
+  const [lon2, lat2] = to;
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return 6371000 * c;
+}
+
+function enrichServicesWithStraightLineDistances(point: [number, number], servicesToUse: Service[]): Service[] {
+  return servicesToUse
+    .map((service) => {
+      const distance = haversineDistance(point, service.coordinates);
+      return {
+        ...service,
+        distance,
+        straightDistance: distance,
+        duration: distance / WALKING_SPEED_METERS_PER_SECOND,
+      };
+    })
+    .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+}
+
+function getNearestKnownAddress(point: [number, number], servicesToUse: Service[]): string {
+  const nearestService = servicesToUse
+    .filter((service) => service.address || service.name)
+    .map((service) => ({
+      service,
+      distance: haversineDistance(point, service.coordinates),
+    }))
+    .sort((a, b) => a.distance - b.distance)[0]?.service;
+
+  return nearestService?.address || nearestService?.name || 'Brak adresu dla tego punktu';
+}
+
+function getPointKey(point: [number, number]): string {
+  return `${point[0].toFixed(6)},${point[1].toFixed(6)}`;
 }
 
 export default App;

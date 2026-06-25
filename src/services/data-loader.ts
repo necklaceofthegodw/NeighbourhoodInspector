@@ -22,15 +22,18 @@ export class DataLoader {
     const services: Service[] = [];
 
     geojson.features.forEach((feature) => {
-      const props = feature.properties as Record<string, unknown>;
+      const props: any = feature.properties || {};
       const coords = (feature.geometry as any).coordinates;
 
+      const name = props.name || (props.tags && props.tags.name) || 'Unknown';
+      const category = (props.category) || (props.tags && (props.tags.amenity || props.tags.shop)) || 'shop';
+
       const service: Service = {
-        id: props.id as string,
-        name: (props.name as string) || 'Unknown',
-        category: (props.category as any) || 'shop',
+        id: String(props.id || (props.tags && props.tags.ref) || Math.random()),
+        name: String(name),
+        category: category as any,
         coordinates: coords,
-        address: props.address as string | undefined,
+        address: (props.address as string) || (props.tags && props.tags['addr:street']) || undefined,
       };
 
       services.push(service);
@@ -43,21 +46,20 @@ export class DataLoader {
    * Parse districts from GeoJSON
    */
   static parseDistricts(geojson: GeoJSON): District[] {
-    const districts: District[] = [];
-
-    geojson.features.forEach((feature) => {
-      const props = feature.properties as Record<string, unknown>;
+    return (geojson.features || []).map((feature: any, idx: number) => {
+      const props = feature.properties || {};
+      const tags = props.tags || {};
+      const name = props.name || props['name:pl'] || tags.name || tags['name:pl'] || `Dzielnica ${idx + 1}`;
+      const id = String(props.id || feature.id || `d${idx + 1}`);
 
       const district: District = {
-        id: props.id as string,
-        name: (props.name as string) || 'Unknown',
+        id,
+        name,
         geometry: feature.geometry,
       };
 
-      districts.push(district);
+      return district;
     });
-
-    return districts;
   }
 
   /**

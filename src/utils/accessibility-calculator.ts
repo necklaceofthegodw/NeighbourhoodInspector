@@ -84,8 +84,8 @@ export class AccessibilityCalculator {
    * Determine accessibility level based on index
    */
   static getAccessibilityLevel(index: number): 'good' | 'medium' | 'bad' {
-    if (index >= 0.35) return 'good';
-    if (index >= 0.15) return 'medium';
+    if (index >= 250) return 'good';
+    if (index >= 75) return 'medium';
     return 'bad';
   }
 

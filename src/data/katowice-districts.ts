@@ -1,294 +1,140 @@
 import type { District } from '../types';
+import geo from './katowice-districts.generated';
 
-export const katowiceDistricts: District[] = [
-  {
-    id: 'd1',
-    name: 'Śródmieście',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.018, 50.254],
-        [19.025, 50.249],
-        [19.036, 50.249],
-        [19.043, 50.257],
-        [19.042, 50.265],
-        [19.033, 50.270],
-        [19.023, 50.270],
-        [19.015, 50.266],
-        [19.018, 50.254],
-      ]],
-    },
+type Position = [number, number];
+
+const SIMPLIFICATION_TOLERANCE = 0.0002;
+const KATOWICE_LATITUDE_SCALE = Math.cos((50.2645 * Math.PI) / 180);
+
+function getDistrictName(feature: any): string | null {
+  const properties = feature.properties || {};
+  const tags = properties.tags || {};
+  return properties.name || properties['name:pl'] || tags.name || tags['name:pl'] || null;
+}
+
+function simplifyGeometry(geometry: any) {
+  if (geometry.type === 'Polygon') {
+    return {
+      ...geometry,
+      coordinates: geometry.coordinates.map(simplifyRing),
+    };
+  }
+
+  if (geometry.type === 'MultiPolygon') {
+    return {
+      ...geometry,
+      coordinates: geometry.coordinates.map((polygon: Position[][]) => polygon.map(simplifyRing)),
+    };
+  }
+
+  return geometry;
+}
+
+function simplifyRing(ring: Position[]): Position[] {
+  if (ring.length <= 8) {
+    return ring;
+  }
+
+  const isClosed = pointsEqual(ring[0], ring[ring.length - 1]);
+  const openRing = isClosed ? ring.slice(0, -1) : ring.slice();
+
+  if (openRing.length <= 8) {
+    return closeRing(openRing);
+  }
+
+  const splitIndex = findFarthestPointIndex(openRing, openRing[0]);
+  const firstArc = openRing.slice(0, splitIndex + 1);
+  const secondArc = [...openRing.slice(splitIndex), openRing[0]];
+
+  const simplified = [
+    ...simplifyLine(firstArc, SIMPLIFICATION_TOLERANCE),
+    ...simplifyLine(secondArc, SIMPLIFICATION_TOLERANCE).slice(1, -1),
+  ];
+
+  return simplified.length >= 3 ? closeRing(simplified) : ring;
+}
+
+function simplifyLine(points: Position[], tolerance: number): Position[] {
+  if (points.length <= 2) {
+    return points;
+  }
+
+  let maxDistance = 0;
+  let maxIndex = 0;
+  const start = points[0];
+  const end = points[points.length - 1];
+
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const distance = pointToSegmentDistance(points[i], start, end);
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      maxIndex = i;
+    }
+  }
+
+  if (maxDistance <= tolerance) {
+    return [start, end];
+  }
+
+  return [
+    ...simplifyLine(points.slice(0, maxIndex + 1), tolerance).slice(0, -1),
+    ...simplifyLine(points.slice(maxIndex), tolerance),
+  ];
+}
+
+function pointToSegmentDistance(point: Position, start: Position, end: Position): number {
+  const x = point[0] * KATOWICE_LATITUDE_SCALE;
+  const y = point[1];
+  const x1 = start[0] * KATOWICE_LATITUDE_SCALE;
+  const y1 = start[1];
+  const x2 = end[0] * KATOWICE_LATITUDE_SCALE;
+  const y2 = end[1];
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(x - x1, y - y1);
+  }
+
+  const projection = Math.max(0, Math.min(1, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)));
+  return Math.hypot(x - (x1 + projection * dx), y - (y1 + projection * dy));
+}
+
+function findFarthestPointIndex(points: Position[], from: Position): number {
+  let maxDistance = 0;
+  let maxIndex = Math.floor(points.length / 2);
+
+  points.forEach((point, index) => {
+    const distance = Math.hypot(
+      (point[0] - from[0]) * KATOWICE_LATITUDE_SCALE,
+      point[1] - from[1]
+    );
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      maxIndex = index;
+    }
+  });
+
+  return maxIndex;
+}
+
+function closeRing(ring: Position[]): Position[] {
+  return pointsEqual(ring[0], ring[ring.length - 1]) ? ring : [...ring, ring[0]];
+}
+
+function pointsEqual(first: Position, second: Position): boolean {
+  return first[0] === second[0] && first[1] === second[1];
+}
+
+export const katowiceDistricts: District[] = (geo.features || [])
+  .filter((feature: any) => {
+    const geometryType = feature.geometry?.type;
+    return getDistrictName(feature) && (geometryType === 'Polygon' || geometryType === 'MultiPolygon');
+  })
+  .map((feature: any, idx: number) => ({
+    id: feature.id ? String(feature.id) : `d${idx + 1}`,
+    name: getDistrictName(feature) || `Dzielnica ${idx + 1}`,
+    geometry: simplifyGeometry(feature.geometry),
     accessibilityIndex: 0,
     color: '#95a5a6',
-  },
-  {
-    id: 'd2',
-    name: 'Koszutka',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.012, 50.270],
-        [19.021, 50.264],
-        [19.031, 50.264],
-        [19.037, 50.269],
-        [19.035, 50.276],
-        [19.024, 50.282],
-        [19.012, 50.280],
-        [19.008, 50.273],
-        [19.012, 50.270],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd3',
-    name: 'Bogucice',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.002, 50.280],
-        [19.013, 50.278],
-        [19.022, 50.280],
-        [19.027, 50.286],
-        [19.023, 50.292],
-        [19.011, 50.292],
-        [19.003, 50.289],
-        [19.002, 50.280],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd4',
-    name: 'Załęże',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.022, 50.281],
-        [19.038, 50.281],
-        [19.052, 50.286],
-        [19.052, 50.296],
-        [19.038, 50.300],
-        [19.022, 50.296],
-        [19.018, 50.288],
-        [19.022, 50.281],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd5',
-    name: 'Osiedle Witosa',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [18.998, 50.289],
-        [19.013, 50.285],
-        [19.022, 50.287],
-        [19.026, 50.294],
-        [19.021, 50.300],
-        [19.005, 50.303],
-        [18.997, 50.300],
-        [18.995, 50.292],
-        [18.998, 50.289],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd6',
-    name: 'Dąb',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [18.990, 50.300],
-        [19.004, 50.297],
-        [19.015, 50.300],
-        [19.022, 50.308],
-        [19.017, 50.316],
-        [19.003, 50.318],
-        [18.990, 50.312],
-        [18.989, 50.303],
-        [18.990, 50.300],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd7',
-    name: 'Ligota-Panewniki',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [18.964, 50.233],
-        [18.983, 50.228],
-        [19.008, 50.229],
-        [19.028, 50.236],
-        [19.023, 50.246],
-        [19.002, 50.250],
-        [18.980, 50.246],
-        [18.966, 50.241],
-        [18.964, 50.233],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd8',
-    name: 'Załęska Hałda-Brynów',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.006, 50.244],
-        [19.024, 50.239],
-        [19.036, 50.242],
-        [19.041, 50.251],
-        [19.035, 50.258],
-        [19.019, 50.261],
-        [19.005, 50.254],
-        [19.006, 50.244],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd9',
-    name: 'Brynów-Osiedle Zgrzebnioka',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.013, 50.251],
-        [19.033, 50.247],
-        [19.046, 50.251],
-        [19.052, 50.259],
-        [19.045, 50.267],
-        [19.028, 50.269],
-        [19.014, 50.262],
-        [19.013, 50.251],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd10',
-    name: 'Os. Paderewskiego-Muchowiec',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.037, 50.249],
-        [19.054, 50.247],
-        [19.061, 50.256],
-        [19.057, 50.266],
-        [19.045, 50.268],
-        [19.032, 50.263],
-        [19.027, 50.252],
-        [19.037, 50.249],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd11',
-    name: 'Piotrowice-Ochojec',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.005, 50.266],
-        [19.017, 50.261],
-        [19.045, 50.267],
-        [19.056, 50.279],
-        [19.060, 50.294],
-        [19.047, 50.304],
-        [19.020, 50.302],
-        [19.005, 50.289],
-        [19.005, 50.266],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd12',
-    name: 'Janów-Nikiszowiec',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.049, 50.264],
-        [19.072, 50.260],
-        [19.085, 50.267],
-        [19.088, 50.278],
-        [19.079, 50.286],
-        [19.059, 50.287],
-        [19.046, 50.279],
-        [19.049, 50.264],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd13',
-    name: 'Giszowiec',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.067, 50.244],
-        [19.089, 50.242],
-        [19.104, 50.249],
-        [19.112, 50.261],
-        [19.103, 50.271],
-        [19.082, 50.274],
-        [19.068, 50.270],
-        [19.067, 50.244],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd14',
-    name: 'Szopienice-Burowiec',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.095, 50.298],
-        [19.130, 50.294],
-        [19.151, 50.304],
-        [19.152, 50.320],
-        [19.128, 50.324],
-        [19.103, 50.318],
-        [19.095, 50.308],
-        [19.095, 50.298],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-  {
-    id: 'd15',
-    name: 'Zawodzie',
-    geometry: {
-      type: 'Polygon',
-      coordinates: [[
-        [19.045, 50.273],
-        [19.062, 50.270],
-        [19.073, 50.274],
-        [19.072, 50.282],
-        [19.061, 50.287],
-        [19.046, 50.286],
-        [19.045, 50.273],
-      ]],
-    },
-    accessibilityIndex: 0,
-    color: '#95a5a6',
-  },
-];
+  }));
