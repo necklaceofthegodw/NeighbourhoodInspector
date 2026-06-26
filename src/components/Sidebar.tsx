@@ -4,6 +4,8 @@ import { AccessibilityCalculator } from '../utils/accessibility-calculator';
 import { ServiceList } from './ServiceList';
 import './Sidebar.css';
 
+type SheetState = 'peek' | 'half' | 'full';
+
 interface SidebarProps {
   selectedPoint: [number, number] | null;
   selectedAddress: string | null;
@@ -28,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
 }) => {
   const [addressValue, setAddressValue] = useState('');
+  const [sheetState, setSheetState] = useState<SheetState>('half');
 
   const distanceBands = useMemo(() => {
     return AccessibilityCalculator.groupByDistanceBand(services);
@@ -40,16 +43,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setAddressValue(selectedAddress || '');
   }, [selectedAddress]);
 
+  useEffect(() => {
+    if (selectedPoint) {
+      setSheetState('half');
+    }
+  }, [selectedPoint]);
+
   if (!selectedPoint) {
     return null;
   }
 
   const coordinates = `${selectedPoint[1].toFixed(4)}, ${selectedPoint[0].toFixed(4)}`;
-  const handleAddressSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    onAddressSearch(addressValue);
-  };
-
   const categories: ServiceCategory[] = ['shop', 'pharmacy', 'restaurant', 'gym', 'school', 'library'];
   const stats = Object.fromEntries(
     categories.map((cat) => {
@@ -58,18 +62,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
     })
   );
 
+  const handleAddressSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    onAddressSearch(addressValue);
+  };
+
   return (
-    <div className="sidebar">
+    <div className={`sidebar sheet-${sheetState}`}>
+      <button
+        className="sheet-handle"
+        type="button"
+        aria-label="Toggle panel"
+        onClick={() => setSheetState(sheetState === 'peek' ? 'half' : 'peek')}
+      >
+        <span />
+      </button>
+
       <div className="sidebar-header">
-        <h2>Accessibility Analysis</h2>
-        <button className="close-btn" onClick={onClose}>
-          ✕
-        </button>
+        <div className="sidebar-title-group">
+          <h2>Accessibility Analysis</h2>
+          <div className="mobile-score-summary">
+            <span style={{ backgroundColor: accessibilityColor }}>{accessibilityIndex.toFixed(0)}</span>
+            <strong>{accessibilityLevel.toUpperCase()}</strong>
+            <em>{selectedAddress || coordinates}</em>
+          </div>
+        </div>
+
+        <div className="sidebar-actions">
+          <div className="sheet-size-controls" aria-label="Panel size">
+            <button type="button" className={sheetState === 'peek' ? 'active' : ''} onClick={() => setSheetState('peek')}>
+              Min
+            </button>
+            <button type="button" className={sheetState === 'half' ? 'active' : ''} onClick={() => setSheetState('half')}>
+              Half
+            </button>
+            <button type="button" className={sheetState === 'full' ? 'active' : ''} onClick={() => setSheetState('full')}>
+              Full
+            </button>
+          </div>
+          <button className="close-btn" onClick={onClose} aria-label="Close panel">
+            x
+          </button>
+        </div>
       </div>
 
       <div className="sidebar-content">
-        {/* Location Info */}
-        <section className="info-section">
+        <section className="info-section location-section">
           <h3>Selected Location</h3>
           <form className="location-search" onSubmit={handleAddressSubmit}>
             <input
@@ -87,7 +125,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <p className="location-meta">{coordinates}</p>
         </section>
 
-        {/* Radius Control */}
         <section className="info-section">
           <h3>Scoring Horizon</h3>
           <div className="radius-control">
@@ -104,19 +141,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <p className="radius-help">Services farther away contribute less; outside this range they score 0.</p>
         </section>
 
-        {/* Accessibility Index */}
         <section className="info-section">
           <h3>Accessibility Index</h3>
-          <div
-            className="accessibility-index"
-            style={{ backgroundColor: accessibilityColor }}
-          >
+          <div className="accessibility-index" style={{ backgroundColor: accessibilityColor }}>
             <div className="index-value">{accessibilityIndex.toFixed(0)}</div>
             <div className="index-level">{accessibilityLevel.toUpperCase()}</div>
           </div>
-          <p className="index-description">
-            Category weights + distance decay, normalized to 0-100
-          </p>
+          <p className="index-description">Category weights + distance decay, normalized to 0-100</p>
         </section>
 
         <section className="info-section">
@@ -135,7 +166,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </section>
 
-        {/* Distance Bands Summary */}
         <section className="info-section">
           <h3>Services by Walking Time</h3>
           <div className="distance-bands">
@@ -158,7 +188,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </section>
 
-        {/* Category Summary */}
         <section className="info-section">
           <h3>Services by Category</h3>
           <div className="category-stats">
@@ -171,7 +200,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </section>
 
-        {/* Service List */}
         <section className="info-section full-height">
           <h3>Nearby Services</h3>
           <ServiceList services={services} />

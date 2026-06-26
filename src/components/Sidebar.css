@@ -18,12 +18,29 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .sidebar-header h2 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+}
+
+.sidebar-title-group {
+  min-width: 0;
+}
+
+.mobile-score-summary,
+.sheet-handle,
+.sheet-size-controls {
+  display: none;
+}
+
+.sidebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .close-btn {
@@ -213,21 +230,21 @@
   font-size: 13px;
 }
 
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-    font-size: 13px;
-  }
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
 
-  .legend-color {
-    width: 14px;
-    height: 14px;
-    border-radius: 4px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    display: inline-block;
-  }
+.legend-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  display: inline-block;
+}
 .info-section.full-height {
   flex: 1;
   display: flex;
@@ -259,14 +276,168 @@
 /* Responsive design */
 @media (max-width: 768px) {
   .sidebar {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
     width: 100%;
-    height: auto;
-    max-height: 50vh;
+    height: min(58dvh, 520px);
+    max-height: none;
     border-left: none;
     border-top: 1px solid #e0e0e0;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -10px 30px rgba(44, 62, 80, 0.2);
+    z-index: 1001;
+    transition: height 0.2s ease;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .sidebar.sheet-peek {
+    height: 122px;
+  }
+
+  .sidebar.sheet-half {
+    height: min(58dvh, 520px);
+  }
+
+  .sidebar.sheet-full {
+    height: calc(100dvh - 76px);
+  }
+
+  .sheet-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 22px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .sheet-handle span {
+    width: 44px;
+    height: 4px;
+    border-radius: 999px;
+    background: #c7d0d9;
+  }
+
+  .sidebar-header {
+    padding: 4px 14px 12px 16px;
+    border-bottom: 1px solid #edf0f2;
+    align-items: flex-start;
+  }
+
+  .sidebar-header h2 {
+    display: none;
+  }
+
+  .mobile-score-summary {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .mobile-score-summary span {
+    min-width: 44px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: #2ecc71;
+    color: #fff;
+    font-size: 22px;
+    font-weight: 800;
+    text-align: center;
+  }
+
+  .mobile-score-summary strong {
+    color: #2c3e50;
+    font-size: 12px;
+    letter-spacing: 0;
+  }
+
+  .mobile-score-summary em {
+    min-width: 0;
+    color: #7f8c8d;
+    font-size: 12px;
+    font-style: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-actions {
+    align-items: flex-start;
+  }
+
+  .sheet-size-controls {
+    display: flex;
+    overflow: hidden;
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+  }
+
+  .sheet-size-controls button {
+    border: 0;
+    border-right: 1px solid #d8dee4;
+    background: #fff;
+    color: #5f6c72;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 7px 8px;
+  }
+
+  .sheet-size-controls button:last-child {
+    border-right: 0;
+  }
+
+  .sheet-size-controls button.active {
+    background: #1f78d1;
+    color: #fff;
+  }
+
+  .close-btn {
+    width: 30px;
+    height: 30px;
+    font-size: 16px;
+  }
+
+  .sidebar-content {
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .sidebar.sheet-peek .sidebar-content {
+    display: none;
+  }
+
+  .location-section {
+    display: none;
+  }
+
+  .info-section {
+    margin-bottom: 16px;
+  }
+
+  .accessibility-index {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    text-align: left;
+  }
+
+  .index-value {
+    margin-bottom: 0;
+    font-size: 30px;
   }
 
   .distance-bands {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .category-stats {
+    grid-template-columns: 1fr;
   }
 }

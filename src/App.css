@@ -36,3 +36,13 @@ body,
   max-width: 500px;
   text-align: center;
 }
+
+@media (max-width: 768px) {
+  .error-message {
+    top: 74px;
+    width: calc(100% - 24px);
+    max-width: none;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+}

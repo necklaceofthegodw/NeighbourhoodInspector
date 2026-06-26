@@ -1,5 +1,6 @@
 import { useCallback, useState, useEffect } from 'react';
 import { Map } from './components/Map';
+import { MobileSearch } from './components/MobileSearch';
 import { Sidebar } from './components/Sidebar';
 import type { Service, District, MapState } from './types';
 import { geocodingClient } from './services/geocoding-client';
@@ -175,6 +176,12 @@ function App() {
         selectedAddress={mapState.selectedAddress}
         radiusMeters={radiusMeters}
         loading={mapState.loading}
+      />
+
+      <MobileSearch
+        selectedAddress={mapState.selectedAddress}
+        loading={mapState.loading}
+        onAddressSearch={handleAddressSearch}
       />
 
       <Sidebar
