@@ -17,6 +17,10 @@ interface MapProps {
 
 const KATOWICE_COORDS: [number, number] = [50.2645, 19.0238];
 const ZOOM_LEVEL = 12;
+const MOBILE_BREAKPOINT_PX = 768;
+const MOBILE_TOP_OVERLAY_PX = 88;
+const MOBILE_BOTTOM_SHEET_RATIO = 0.58;
+const MOBILE_BOTTOM_SHEET_MAX_PX = 520;
 
 export const Map: React.FC<MapProps> = ({
   services,
@@ -186,7 +190,8 @@ export const Map: React.FC<MapProps> = ({
       }
 
       const currentZoom = map.current.getZoom() ?? ZOOM_LEVEL;
-      map.current.flyTo([selectedPoint[1], selectedPoint[0]], currentZoom);
+      const selectedLatLng = L.latLng(selectedPoint[1], selectedPoint[0]);
+      map.current.flyTo(getVisibleCenterForPoint(selectedLatLng, currentZoom), currentZoom);
     }
   }, [selectedAddress, selectedPoint]);
 
@@ -238,6 +243,22 @@ export const Map: React.FC<MapProps> = ({
       };
       return entities[char];
     });
+  }
+
+  function getVisibleCenterForPoint(latLng: L.LatLng, zoom: number): L.LatLng {
+    if (!map.current || window.innerWidth > MOBILE_BREAKPOINT_PX) {
+      return latLng;
+    }
+
+    const mapSize = map.current.getSize();
+    const bottomOverlay = Math.min(window.innerHeight * MOBILE_BOTTOM_SHEET_RATIO, MOBILE_BOTTOM_SHEET_MAX_PX);
+    const visibleHeight = Math.max(160, mapSize.y - MOBILE_TOP_OVERLAY_PX - bottomOverlay);
+    const desiredMarkerPoint = L.point(mapSize.x / 2, MOBILE_TOP_OVERLAY_PX + visibleHeight / 2);
+    const mapCenterPoint = L.point(mapSize.x / 2, mapSize.y / 2);
+    const projectedMarkerPoint = map.current.project(latLng, zoom);
+    const projectedCenter = projectedMarkerPoint.subtract(desiredMarkerPoint.subtract(mapCenterPoint));
+
+    return map.current.unproject(projectedCenter, zoom);
   }
 
   return (
