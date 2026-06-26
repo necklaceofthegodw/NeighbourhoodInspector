@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { Service, ServiceCategory } from '../types';
 import { AccessibilityCalculator } from '../utils/accessibility-calculator';
 import { ServiceList } from './ServiceList';
@@ -6,21 +6,29 @@ import './Sidebar.css';
 
 interface SidebarProps {
   selectedPoint: [number, number] | null;
+  selectedAddress: string | null;
   services: Service[];
   accessibilityIndex: number;
   radiusMeters: number;
+  loading: boolean;
+  onAddressSearch: (address: string) => void | Promise<void>;
   onRadiusChange: (radius: number) => void;
   onClose: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   selectedPoint,
+  selectedAddress,
   services,
   accessibilityIndex,
   radiusMeters,
+  loading,
+  onAddressSearch,
   onRadiusChange,
   onClose,
 }) => {
+  const [addressValue, setAddressValue] = useState('');
+
   const distanceBands = useMemo(() => {
     return AccessibilityCalculator.groupByDistanceBand(services);
   }, [services]);
@@ -28,11 +36,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const accessibilityLevel = AccessibilityCalculator.getAccessibilityLevel(accessibilityIndex);
   const accessibilityColor = AccessibilityCalculator.getAccessibilityColor(accessibilityLevel);
 
+  useEffect(() => {
+    setAddressValue(selectedAddress || '');
+  }, [selectedAddress]);
+
   if (!selectedPoint) {
     return null;
   }
 
   const coordinates = `${selectedPoint[1].toFixed(4)}, ${selectedPoint[0].toFixed(4)}`;
+  const handleAddressSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    onAddressSearch(addressValue);
+  };
 
   const categories: ServiceCategory[] = ['shop', 'pharmacy', 'restaurant', 'gym', 'school', 'library'];
   const stats = Object.fromEntries(
@@ -55,12 +71,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Location Info */}
         <section className="info-section">
           <h3>Selected Location</h3>
-          <p className="coordinates">{coordinates}</p>
+          <form className="location-search" onSubmit={handleAddressSubmit}>
+            <input
+              className="address-input"
+              type="text"
+              value={addressValue}
+              disabled={loading}
+              placeholder={coordinates}
+              onChange={(event) => setAddressValue(event.target.value)}
+            />
+            <button className="location-search-button" type="submit" disabled={loading || !addressValue.trim()}>
+              Search
+            </button>
+          </form>
+          <p className="location-meta">{coordinates}</p>
         </section>
 
         {/* Radius Control */}
         <section className="info-section">
-          <h3>Search Radius</h3>
+          <h3>Scoring Horizon</h3>
           <div className="radius-control">
             <input
               type="range"
@@ -72,7 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
             <div className="radius-label">{(radiusMeters / 1000).toFixed(1)} km</div>
           </div>
-          <p className="radius-help">Default 1.5 km; adjust to expand or narrow results.</p>
+          <p className="radius-help">Services farther away contribute less; outside this range they score 0.</p>
         </section>
 
         {/* Accessibility Index */}
@@ -82,11 +111,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="accessibility-index"
             style={{ backgroundColor: accessibilityColor }}
           >
-            <div className="index-value">{accessibilityIndex.toFixed(2)}</div>
+            <div className="index-value">{accessibilityIndex.toFixed(0)}</div>
             <div className="index-level">{accessibilityLevel.toUpperCase()}</div>
           </div>
           <p className="index-description">
-            Services / Avg Distance
+            Category weights + distance decay, normalized to 0-100
           </p>
         </section>
 

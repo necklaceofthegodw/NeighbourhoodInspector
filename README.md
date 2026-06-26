@@ -20,11 +20,11 @@ A React + TypeScript web application for analyzing pedestrian accessibility of s
 
 ✅ **Accessibility Analysis** (in development)
 - OSRM integration for network-based walking distance calculation
-- Accessibility Index = Services Count / Average Walking Distance
+- Accessibility Index = Walk Score-like category weights + gravity-style distance decay, normalized to 0-100
 - Distance bands: 5 min, 10 min, 15 min, and beyond
 - Right sidebar displaying:
   - Selected location coordinates
-  - Accessibility index and level (excellent/good/moderate/poor)
+  - Accessibility score and level (good/medium/bad)
   - Services grouped by walking time
   - Filterable service list with sorting options
 
@@ -120,34 +120,20 @@ Output will be in the `dist/` directory.
 
 ## Data Management
 
-### Sample Data
+### OpenStreetMap Data
 
-Currently using generated sample data for testing:
+The app loads real service POIs from `public/katowice-services.json`. Refresh this file from Overpass / OpenStreetMap with:
 
-- **Services**: 200 randomly distributed POIs across Katowice
-- **Districts**: 8 Katowice administrative boundaries
+```bash
+npm run fetch:services
+```
 
-### Using Real OSM Data
+The script queries shops, pharmacies, restaurants, gyms, schools, and libraries within Katowice, then writes them in the `Service[]` shape used by the app.
 
-To use actual OpenStreetMap data:
+District boundaries can be refreshed separately with:
 
-1. **Extract data** using Overpass Turbo (https://overpass-turbo.eu/):
-   - Query for buildings, services, and administrative boundaries
-   - Export as GeoJSON
-
-2. **Place files** in `src/data/`:
-   - `services.geojson` - Service points
-   - `districts.geojson` - District boundaries
-
-3. **Update data loading** in `App.tsx`:
-
-```typescript
-// Replace sample data generation with:
-const servicesData = await DataLoader.loadGeoJSON('/data/services.geojson');
-const services = DataLoader.parseServices(servicesData);
-
-const districtsData = await DataLoader.loadGeoJSON('/data/districts.geojson');
-const districts = DataLoader.parseDistricts(districtsData);
+```bash
+npm run fetch:districts
 ```
 
 ## API & Services
@@ -261,4 +247,3 @@ import { Service, District } from '../types';
 ## Contributing
 
 [Add contribution guidelines here]
-

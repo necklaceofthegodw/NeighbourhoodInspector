@@ -10,6 +10,7 @@ import './App.css';
 
 const DEFAULT_DISTRICT_COLOR = '#95a5a6';
 const WALKING_SPEED_METERS_PER_SECOND = 1.4;
+const DEFAULT_ACCESSIBILITY_RADIUS_METERS = 2500;
 
 function App() {
   const [mapState, setMapState] = useState<MapState>({
@@ -23,7 +24,7 @@ function App() {
   const [services, setServices] = useState<Service[]>([]);
   const [districts, setDistricts] = useState<District[]>(katowiceDistricts);
   const [accessibilityIndex, setAccessibilityIndex] = useState(0);
-  const [radiusMeters, setRadiusMeters] = useState(1500);
+  const [radiusMeters, setRadiusMeters] = useState(DEFAULT_ACCESSIBILITY_RADIUS_METERS);
   const [lastEnrichedServices, setLastEnrichedServices] = useState<Service[]>([]);
 
   // Initialize data
@@ -59,36 +60,38 @@ function App() {
     return withinRadius.sort((a, b) => (a.distance ?? a.straightDistance ?? Infinity) - (b.distance ?? b.straightDistance ?? Infinity));
   }, []);
 
-  const handlePointSelected = useCallback((point: [number, number]) => {
+  const handlePointSelected = useCallback((point: [number, number], addressOverride?: string) => {
     const selectedPointKey = getPointKey(point);
 
     setMapState((prev) => ({
       ...prev,
       selectedPoint: point,
-      selectedAddress: 'Szukam adresu...',
+      selectedAddress: addressOverride || 'Szukam adresu...',
       loading: true,
       error: null,
     }));
 
-    geocodingClient.reverseGeocode(point).then((resolvedAddress) => {
-      setMapState((prev) => {
-        if (!prev.selectedPoint || getPointKey(prev.selectedPoint) !== selectedPointKey) {
-          return prev;
-        }
+    if (!addressOverride) {
+      geocodingClient.reverseGeocode(point).then((resolvedAddress) => {
+        setMapState((prev) => {
+          if (!prev.selectedPoint || getPointKey(prev.selectedPoint) !== selectedPointKey) {
+            return prev;
+          }
 
-        return {
-          ...prev,
-          selectedAddress: resolvedAddress || getNearestKnownAddress(point, services),
-        };
+          return {
+            ...prev,
+            selectedAddress: resolvedAddress || getNearestKnownAddress(point, services),
+          };
+        });
       });
-    });
+    }
 
     try {
       const enrichedServices = enrichServicesWithStraightLineDistances(point, services);
       setLastEnrichedServices(enrichedServices);
 
       const validServices = filterServicesByRadius(enrichedServices, radiusMeters);
-      const index = AccessibilityCalculator.calculateIndex(validServices);
+      const index = AccessibilityCalculator.calculateIndex(validServices, radiusMeters);
 
       setMapState((prev) => ({
         ...prev,
@@ -108,6 +111,32 @@ function App() {
     }
   }, [filterServicesByRadius, radiusMeters, services]);
 
+  const handleAddressSearch = useCallback(async (address: string) => {
+    const trimmedAddress = address.trim();
+    if (!trimmedAddress) {
+      return;
+    }
+
+    setMapState((prev) => ({
+      ...prev,
+      selectedAddress: trimmedAddress,
+      loading: true,
+      error: null,
+    }));
+
+    const result = await geocodingClient.searchAddress(trimmedAddress);
+    if (!result) {
+      setMapState((prev) => ({
+        ...prev,
+        loading: false,
+        error: 'Address not found in Katowice',
+      }));
+      return;
+    }
+
+    handlePointSelected(result.point, result.address);
+  }, [handlePointSelected]);
+
   const handleRadiusChange = (newRadius: number) => {
     setRadiusMeters(newRadius);
 
@@ -116,7 +145,7 @@ function App() {
     }
 
     const validServices = filterServicesByRadius(lastEnrichedServices, newRadius);
-    const index = AccessibilityCalculator.calculateIndex(validServices);
+    const index = AccessibilityCalculator.calculateIndex(validServices, newRadius);
 
     setMapState((prev) => ({
       ...prev,
@@ -148,9 +177,12 @@ function App() {
 
       <Sidebar
         selectedPoint={mapState.selectedPoint}
+        selectedAddress={mapState.selectedAddress}
         services={mapState.selectedServices}
         accessibilityIndex={accessibilityIndex}
         radiusMeters={radiusMeters}
+        loading={mapState.loading}
+        onAddressSearch={handleAddressSearch}
         onRadiusChange={handleRadiusChange}
         onClose={handleCloseSidebar}
       />
@@ -188,7 +220,7 @@ function colorDistrictsByAccessibility(
       })
       .filter((service) => service.distance <= radiusMeters);
 
-    const accessibilityIndex = AccessibilityCalculator.calculateIndex(nearbyServices);
+    const accessibilityIndex = AccessibilityCalculator.calculateIndex(nearbyServices, radiusMeters);
     const accessibilityLevel = AccessibilityCalculator.getAccessibilityLevel(accessibilityIndex);
     const totalDistance = nearbyServices.reduce((sum, service) => sum + (service.distance ?? 0), 0);
 

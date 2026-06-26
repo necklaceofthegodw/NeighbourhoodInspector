@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "fetch:services": "node ./scripts/fetch-katowice-services.mjs",
     "fetch:districts": "node ./scripts/fetch-katowice-geojson.mjs"
   },
   "dependencies": {
