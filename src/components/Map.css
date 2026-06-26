@@ -67,6 +67,13 @@
   font-size: 14px;
 }
 
+.district-label {
+  width: auto !important;
+  height: auto !important;
+  background: transparent;
+  border: 0;
+}
+
 .district-label-text {
   padding: 4px 8px;
   font-size: 12px;

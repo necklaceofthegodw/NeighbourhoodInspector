@@ -11,6 +11,8 @@ import './App.css';
 const DEFAULT_DISTRICT_COLOR = '#95a5a6';
 const WALKING_SPEED_METERS_PER_SECOND = 1.4;
 const DEFAULT_ACCESSIBILITY_RADIUS_METERS = 2500;
+const DISTRICT_SAMPLE_GRID_SIZE = 7;
+const MAX_DISTRICT_SAMPLE_POINTS = 60;
 
 function App() {
   const [mapState, setMapState] = useState<MapState>({
@@ -208,30 +210,51 @@ function colorDistrictsByAccessibility(
   }
 
   return districtsToColor.map((district) => {
-    const center = getCenterOfGeometry(district.geometry);
-    const nearbyServices = servicesToUse
-      .map((service) => {
-        const distance = haversineDistance(center, service.coordinates);
-        return {
-          ...service,
-          distance,
-          straightDistance: distance,
-        };
-      })
-      .filter((service) => service.distance <= radiusMeters);
-
-    const accessibilityIndex = AccessibilityCalculator.calculateIndex(nearbyServices, radiusMeters);
+    const samplePoints = getSamplePointsForGeometry(district.geometry);
+    const sampleResults = samplePoints.map((point) => calculateAccessibilityAtPoint(point, servicesToUse, radiusMeters));
+    const accessibilityIndex = average(sampleResults.map((result) => result.accessibilityIndex));
     const accessibilityLevel = AccessibilityCalculator.getAccessibilityLevel(accessibilityIndex);
-    const totalDistance = nearbyServices.reduce((sum, service) => sum + (service.distance ?? 0), 0);
+    const avgServiceCount = average(sampleResults.map((result) => result.serviceCount));
+    const avgDistance = average(sampleResults.map((result) => result.avgDistance).filter((distance) => distance > 0));
 
     return {
       ...district,
       accessibilityIndex,
       color: AccessibilityCalculator.getAccessibilityColor(accessibilityLevel),
-      serviceCount: nearbyServices.length,
-      avgDistance: nearbyServices.length > 0 ? totalDistance / nearbyServices.length : 0,
+      serviceCount: Math.round(avgServiceCount),
+      avgDistance,
     };
   });
+}
+
+function calculateAccessibilityAtPoint(
+  point: [number, number],
+  servicesToUse: Service[],
+  radiusMeters: number
+): { accessibilityIndex: number; serviceCount: number; avgDistance: number } {
+  const nearbyServices = servicesToUse
+    .map((service) => {
+      const distance = haversineDistance(point, service.coordinates);
+      return {
+        ...service,
+        distance,
+        straightDistance: distance,
+      };
+    })
+    .filter((service) => service.distance <= radiusMeters);
+
+  const totalDistance = nearbyServices.reduce((sum, service) => sum + (service.distance ?? 0), 0);
+
+  return {
+    accessibilityIndex: AccessibilityCalculator.calculateIndex(nearbyServices, radiusMeters),
+    serviceCount: nearbyServices.length,
+    avgDistance: nearbyServices.length > 0 ? totalDistance / nearbyServices.length : 0,
+  };
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function getCenterOfGeometry(geometry: District['geometry']): [number, number] {
@@ -262,6 +285,123 @@ function getGeometryPoints(geometry: District['geometry']): [number, number][] {
   }
 
   return [];
+}
+
+function getSamplePointsForGeometry(geometry: District['geometry']): [number, number][] {
+  if (geometry.type === 'Point') {
+    return [geometry.coordinates as [number, number]];
+  }
+
+  if (geometry.type !== 'Polygon' && geometry.type !== 'MultiPolygon') {
+    return [getCenterOfGeometry(geometry)];
+  }
+
+  const points = getGeometryPoints(geometry);
+  if (points.length === 0) {
+    return [getCenterOfGeometry(geometry)];
+  }
+
+  const bounds = getBounds(points);
+  const lonStep = (bounds.maxLon - bounds.minLon) / DISTRICT_SAMPLE_GRID_SIZE;
+  const latStep = (bounds.maxLat - bounds.minLat) / DISTRICT_SAMPLE_GRID_SIZE;
+  const samplePoints: [number, number][] = [];
+
+  for (let lonIndex = 0; lonIndex < DISTRICT_SAMPLE_GRID_SIZE; lonIndex += 1) {
+    for (let latIndex = 0; latIndex < DISTRICT_SAMPLE_GRID_SIZE; latIndex += 1) {
+      const point: [number, number] = [
+        bounds.minLon + lonStep * (lonIndex + 0.5),
+        bounds.minLat + latStep * (latIndex + 0.5),
+      ];
+
+      if (isPointInGeometry(point, geometry)) {
+        samplePoints.push(point);
+      }
+    }
+  }
+
+  const center = getCenterOfGeometry(geometry);
+  if (isPointInGeometry(center, geometry)) {
+    samplePoints.unshift(center);
+  }
+
+  const uniquePoints = dedupePoints(samplePoints);
+  return uniquePoints.length > 0 ? uniquePoints.slice(0, MAX_DISTRICT_SAMPLE_POINTS) : [center];
+}
+
+function getBounds(points: [number, number][]): {
+  minLon: number;
+  maxLon: number;
+  minLat: number;
+  maxLat: number;
+} {
+  return points.reduce(
+    (bounds, [lon, lat]) => ({
+      minLon: Math.min(bounds.minLon, lon),
+      maxLon: Math.max(bounds.maxLon, lon),
+      minLat: Math.min(bounds.minLat, lat),
+      maxLat: Math.max(bounds.maxLat, lat),
+    }),
+    {
+      minLon: Infinity,
+      maxLon: -Infinity,
+      minLat: Infinity,
+      maxLat: -Infinity,
+    }
+  );
+}
+
+function isPointInGeometry(point: [number, number], geometry: District['geometry']): boolean {
+  if (geometry.type === 'Polygon') {
+    return isPointInPolygon(point, geometry.coordinates as [number, number][][]);
+  }
+
+  if (geometry.type === 'MultiPolygon') {
+    return (geometry.coordinates as [number, number][][][]).some((polygon) => isPointInPolygon(point, polygon));
+  }
+
+  return false;
+}
+
+function isPointInPolygon(point: [number, number], polygon: [number, number][][]): boolean {
+  const [outerRing, ...holes] = polygon;
+  if (!outerRing || !isPointInRing(point, outerRing)) {
+    return false;
+  }
+
+  return !holes.some((hole) => isPointInRing(point, hole));
+}
+
+function isPointInRing(point: [number, number], ring: [number, number][]): boolean {
+  const [lon, lat] = point;
+  let isInside = false;
+
+  for (let currentIndex = 0, previousIndex = ring.length - 1; currentIndex < ring.length; previousIndex = currentIndex++) {
+    const [currentLon, currentLat] = ring[currentIndex];
+    const [previousLon, previousLat] = ring[previousIndex];
+    const crossesLatitude = currentLat > lat !== previousLat > lat;
+
+    if (crossesLatitude) {
+      const intersectionLon = ((previousLon - currentLon) * (lat - currentLat)) / (previousLat - currentLat) + currentLon;
+      if (lon < intersectionLon) {
+        isInside = !isInside;
+      }
+    }
+  }
+
+  return isInside;
+}
+
+function dedupePoints(points: [number, number][]): [number, number][] {
+  const seen = new Set<string>();
+  return points.filter((point) => {
+    const key = `${point[0].toFixed(6)},${point[1].toFixed(6)}`;
+    if (seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
 }
 
 function haversineDistance(from: [number, number], to: [number, number]): number {
