@@ -5,6 +5,8 @@
   width: 400px;
   height: 100vh;
   background: white;
+  color: #2c3e50;
+  color-scheme: light;
   border-left: 1px solid #e0e0e0;
   box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
   z-index: 999;
@@ -25,6 +27,7 @@
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+  color: #2c3e50;
 }
 
 .sidebar-title-group {
@@ -81,16 +84,6 @@
   color: #555;
 }
 
-.coordinates {
-  font-size: 12px;
-  color: #7f8c8d;
-  font-family: 'Courier New', monospace;
-  background: #f5f5f5;
-  padding: 8px;
-  border-radius: 4px;
-  margin: 0;
-}
-
 .location-search {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -135,13 +128,6 @@
   cursor: not-allowed;
 }
 
-.location-meta {
-  margin: 6px 0 0 0;
-  color: #7f8c8d;
-  font-family: 'Courier New', monospace;
-  font-size: 11px;
-}
-
 .accessibility-index {
   padding: 16px;
   border-radius: 8px;
@@ -162,12 +148,6 @@
   opacity: 0.9;
 }
 
-.index-description {
-  font-size: 12px;
-  color: #7f8c8d;
-  margin: 8px 0 0 0;
-}
-
 .radius-control {
   display: grid;
   gap: 8px;
@@ -181,12 +161,6 @@
   font-size: 13px;
   font-weight: 600;
   color: #34495e;
-}
-
-.radius-help {
-  font-size: 12px;
-  color: #7f8c8d;
-  margin: 6px 0 0 0;
 }
 
 .distance-bands {
@@ -226,8 +200,19 @@
   align-items: center;
   padding: 8px 12px;
   background: #f5f5f5;
+  color: #2c3e50;
   border-radius: 4px;
   font-size: 13px;
+}
+
+.category-name {
+  color: #34495e;
+  font-weight: 600;
+}
+
+.category-count {
+  color: #2c3e50;
+  font-weight: 700;
 }
 
 .legend-item {

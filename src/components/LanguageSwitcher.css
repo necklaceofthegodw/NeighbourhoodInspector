@@ -1,0 +1,56 @@
+.language-switcher {
+  position: fixed;
+  top: 16px;
+  left: 64px;
+  z-index: 1000;
+  display: inline-flex;
+  overflow: hidden;
+  padding: 3px;
+  border: 1px solid rgba(44, 62, 80, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(44, 62, 80, 0.16);
+  backdrop-filter: blur(12px);
+}
+
+.language-switcher button {
+  min-width: 42px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #5f6c72;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  cursor: pointer;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.language-switcher button:hover {
+  color: #1f78d1;
+}
+
+.language-switcher button.active {
+  background: #1f78d1;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(31, 120, 209, 0.25);
+}
+
+@media (max-width: 768px) {
+  .language-switcher {
+    top: max(64px, calc(env(safe-area-inset-top) + 64px));
+    right: 12px;
+    left: auto;
+    z-index: 1002;
+  }
+
+  .language-switcher button {
+    min-width: 38px;
+    height: 30px;
+    font-size: 11px;
+  }
+}

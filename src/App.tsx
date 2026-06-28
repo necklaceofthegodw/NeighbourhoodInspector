@@ -2,11 +2,13 @@ import { useCallback, useState, useEffect } from 'react';
 import { Map } from './components/Map';
 import { MobileSearch } from './components/MobileSearch';
 import { Sidebar } from './components/Sidebar';
+import { LanguageSwitcher } from './components/LanguageSwitcher';
 import type { Service, District, MapState } from './types';
 import { geocodingClient } from './services/geocoding-client';
 import { AccessibilityCalculator } from './utils/accessibility-calculator';
 import { katowiceDistricts } from './data/katowice-districts';
 import { generateSampleServices } from './utils/sample-data';
+import { getTranslations, type Language } from './i18n';
 import './App.css';
 
 const DEFAULT_DISTRICT_COLOR = '#95a5a6';
@@ -14,8 +16,12 @@ const WALKING_SPEED_METERS_PER_SECOND = 1.4;
 const DEFAULT_ACCESSIBILITY_RADIUS_METERS = 2500;
 const DISTRICT_SAMPLE_GRID_SIZE = 7;
 const MAX_DISTRICT_SAMPLE_POINTS = 60;
+const LANGUAGE_STORAGE_KEY = 'neighbourhood-inspector-language';
 
 function App() {
+  const [language, setLanguage] = useState<Language>(() => getInitialLanguage());
+  const t = getTranslations(language);
+
   const [mapState, setMapState] = useState<MapState>({
     selectedPoint: null,
     selectedAddress: null,
@@ -29,6 +35,12 @@ function App() {
   const [accessibilityIndex, setAccessibilityIndex] = useState(0);
   const [radiusMeters, setRadiusMeters] = useState(DEFAULT_ACCESSIBILITY_RADIUS_METERS);
   const [lastEnrichedServices, setLastEnrichedServices] = useState<Service[]>([]);
+
+  useEffect(() => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    document.documentElement.lang = language;
+    document.title = t.appTitle;
+  }, [language, t.appTitle]);
 
   // Initialize data
   useEffect(() => {
@@ -69,13 +81,13 @@ function App() {
     setMapState((prev) => ({
       ...prev,
       selectedPoint: point,
-      selectedAddress: addressOverride || 'Szukam adresu...',
+      selectedAddress: addressOverride || t.loadingAddress,
       loading: true,
       error: null,
     }));
 
     if (!addressOverride) {
-      geocodingClient.reverseGeocode(point).then((resolvedAddress) => {
+      geocodingClient.reverseGeocode(point, language).then((resolvedAddress) => {
         setMapState((prev) => {
           if (!prev.selectedPoint || getPointKey(prev.selectedPoint) !== selectedPointKey) {
             return prev;
@@ -83,7 +95,7 @@ function App() {
 
           return {
             ...prev,
-            selectedAddress: resolvedAddress || getNearestKnownAddress(point, services),
+            selectedAddress: resolvedAddress || getNearestKnownAddress(point, services, t.fallbackAddress),
           };
         });
       });
@@ -109,10 +121,10 @@ function App() {
       setMapState((prev) => ({
         ...prev,
         loading: false,
-        error: 'Failed to calculate distances',
+        error: t.distanceCalculationError,
       }));
     }
-  }, [filterServicesByRadius, radiusMeters, services]);
+  }, [filterServicesByRadius, language, radiusMeters, services, t.distanceCalculationError, t.fallbackAddress, t.loadingAddress]);
 
   const handleAddressSearch = useCallback(async (address: string) => {
     const trimmedAddress = address.trim();
@@ -127,18 +139,18 @@ function App() {
       error: null,
     }));
 
-    const result = await geocodingClient.searchAddress(trimmedAddress);
+    const result = await geocodingClient.searchAddress(trimmedAddress, language);
     if (!result) {
       setMapState((prev) => ({
         ...prev,
         loading: false,
-        error: 'Address not found in Katowice',
+        error: t.addressNotFound,
       }));
       return;
     }
 
     handlePointSelected(result.point, result.address);
-  }, [handlePointSelected]);
+  }, [handlePointSelected, language, t.addressNotFound]);
 
   const handleRadiusChange = (newRadius: number) => {
     setRadiusMeters(newRadius);
@@ -176,12 +188,21 @@ function App() {
         selectedAddress={mapState.selectedAddress}
         radiusMeters={radiusMeters}
         loading={mapState.loading}
+        language={language}
+        labels={t}
+      />
+
+      <LanguageSwitcher
+        language={language}
+        labels={t}
+        onLanguageChange={setLanguage}
       />
 
       <MobileSearch
         selectedAddress={mapState.selectedAddress}
         loading={mapState.loading}
         onAddressSearch={handleAddressSearch}
+        labels={t}
       />
 
       <Sidebar
@@ -194,11 +215,21 @@ function App() {
         onAddressSearch={handleAddressSearch}
         onRadiusChange={handleRadiusChange}
         onClose={handleCloseSidebar}
+        labels={t}
       />
 
       {mapState.error && <div className="error-message">{mapState.error}</div>}
     </div>
   );
+}
+
+function getInitialLanguage(): Language {
+  const storedLanguage = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  if (storedLanguage === 'pl' || storedLanguage === 'en') {
+    return storedLanguage;
+  }
+
+  return 'pl';
 }
 
 function colorDistrictsByAccessibility(
@@ -438,7 +469,7 @@ function enrichServicesWithStraightLineDistances(point: [number, number], servic
     .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
 }
 
-function getNearestKnownAddress(point: [number, number], servicesToUse: Service[]): string {
+function getNearestKnownAddress(point: [number, number], servicesToUse: Service[], fallbackAddress: string): string {
   const nearestService = servicesToUse
     .filter((service) => service.address || service.name)
     .map((service) => ({
@@ -447,7 +478,7 @@ function getNearestKnownAddress(point: [number, number], servicesToUse: Service[
     }))
     .sort((a, b) => a.distance - b.distance)[0]?.service;
 
-  return nearestService?.address || nearestService?.name || 'Brak adresu dla tego punktu';
+  return nearestService?.address || nearestService?.name || fallbackAddress;
 }
 
 function getPointKey(point: [number, number]): string {

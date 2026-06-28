@@ -26,12 +26,12 @@ export function generateSampleServices(count: number = 200): Service[] {
 
     const category = categories[Math.floor(Math.random() * categories.length)];
     const names: Record<ServiceCategory, string[]> = {
-      shop: ['Supermarket', 'Grocery Store', 'Bakery', 'Market', 'Boutique'],
-      pharmacy: ['Pharmacy', 'Drug Store'],
-      restaurant: ['Restaurant', 'Cafe', 'Pizza Place', 'Bistro', 'Bar'],
-      gym: ['Fitness Center', 'Gym', 'Sports Club'],
-      school: ['Primary School', 'High School', 'Educational Center'],
-      library: ['Public Library', 'Community Library'],
+      shop: ['Supermarket', 'Sklep spożywczy', 'Piekarnia', 'Targ', 'Butik'],
+      pharmacy: ['Apteka', 'Punkt apteczny'],
+      restaurant: ['Restauracja', 'Kawiarnia', 'Pizzeria', 'Bistro', 'Bar'],
+      gym: ['Centrum fitness', 'Siłownia', 'Klub sportowy'],
+      school: ['Szkoła podstawowa', 'Liceum', 'Centrum edukacyjne'],
+      library: ['Biblioteka publiczna', 'Biblioteka osiedlowa'],
     };
 
     const nameList = names[category];
@@ -42,7 +42,7 @@ export function generateSampleServices(count: number = 200): Service[] {
       name: `${baseName} ${Math.floor(Math.random() * 1000)}`,
       category,
       coordinates: [lon, lat],
-      address: `Street ${Math.floor(Math.random() * 100)}, Katowice`,
+      address: `Ulica ${Math.floor(Math.random() * 100)}, Katowice`,
     });
   }
 

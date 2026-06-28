@@ -1,3 +1,5 @@
+import type { Language } from '../i18n';
+
 interface NominatimAddress {
   house_number?: string;
   road?: string;
@@ -30,8 +32,8 @@ class GeocodingClient {
   private cache = new Map<string, string>();
   private searchCache = new Map<string, { point: [number, number]; address: string }>();
 
-  async reverseGeocode(point: [number, number]): Promise<string | null> {
-    const cacheKey = `${point[0].toFixed(6)},${point[1].toFixed(6)}`;
+  async reverseGeocode(point: [number, number], language: Language): Promise<string | null> {
+    const cacheKey = `${language}:${point[0].toFixed(6)},${point[1].toFixed(6)}`;
     const cached = this.cache.get(cacheKey);
     if (cached) {
       return cached;
@@ -43,7 +45,7 @@ class GeocodingClient {
     url.searchParams.set('lon', String(point[0]));
     url.searchParams.set('zoom', '18');
     url.searchParams.set('addressdetails', '1');
-    url.searchParams.set('accept-language', 'pl');
+    url.searchParams.set('accept-language', language);
 
     try {
       const response = await fetch(url.toString(), {
@@ -69,13 +71,13 @@ class GeocodingClient {
     }
   }
 
-  async searchAddress(query: string): Promise<{ point: [number, number]; address: string } | null> {
+  async searchAddress(query: string, language: Language): Promise<{ point: [number, number]; address: string } | null> {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) {
       return null;
     }
 
-    const cacheKey = normalizedQuery.toLowerCase();
+    const cacheKey = `${language}:${normalizedQuery.toLowerCase()}`;
     const cached = this.searchCache.get(cacheKey);
     if (cached) {
       return cached;
@@ -86,7 +88,7 @@ class GeocodingClient {
     url.searchParams.set('q', normalizedQuery.match(/katowice/i) ? normalizedQuery : `${normalizedQuery}, Katowice`);
     url.searchParams.set('limit', '1');
     url.searchParams.set('addressdetails', '1');
-    url.searchParams.set('accept-language', 'pl');
+    url.searchParams.set('accept-language', language);
     url.searchParams.set('countrycodes', 'pl');
     url.searchParams.set('viewbox', KATOWICE_VIEWBOX);
     url.searchParams.set('bounded', '1');

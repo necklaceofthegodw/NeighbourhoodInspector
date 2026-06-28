@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import type { Translation } from '../i18n';
 import type { Service, ServiceCategory } from '../types';
 import { AccessibilityCalculator } from '../utils/accessibility-calculator';
 import { ServiceList } from './ServiceList';
@@ -16,6 +17,7 @@ interface SidebarProps {
   onAddressSearch: (address: string) => void | Promise<void>;
   onRadiusChange: (radius: number) => void;
   onClose: () => void;
+  labels: Translation;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -28,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onAddressSearch,
   onRadiusChange,
   onClose,
+  labels,
 }) => {
   const [addressValue, setAddressValue] = useState('');
   const [sheetState, setSheetState] = useState<SheetState>('half');
@@ -38,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const accessibilityLevel = AccessibilityCalculator.getAccessibilityLevel(accessibilityIndex);
   const accessibilityColor = AccessibilityCalculator.getAccessibilityColor(accessibilityLevel);
+  const accessibilityLevelLabel = labels.levels[accessibilityLevel];
 
   useEffect(() => {
     setAddressValue(selectedAddress || '');
@@ -72,7 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <button
         className="sheet-handle"
         type="button"
-        aria-label="Toggle panel"
+        aria-label={labels.sidebar.togglePanel}
         onClick={() => setSheetState(sheetState === 'peek' ? 'half' : 'peek')}
       >
         <span />
@@ -80,27 +84,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className="sidebar-header">
         <div className="sidebar-title-group">
-          <h2>Accessibility Analysis</h2>
+          <h2>{labels.sidebar.analysisTitle}</h2>
           <div className="mobile-score-summary">
             <span style={{ backgroundColor: accessibilityColor }}>{accessibilityIndex.toFixed(0)}</span>
-            <strong>{accessibilityLevel.toUpperCase()}</strong>
+            <strong>{accessibilityLevelLabel.toUpperCase()}</strong>
             <em>{selectedAddress || coordinates}</em>
           </div>
         </div>
 
         <div className="sidebar-actions">
-          <div className="sheet-size-controls" aria-label="Panel size">
+          <div className="sheet-size-controls" aria-label={labels.sidebar.panelSize}>
             <button type="button" className={sheetState === 'peek' ? 'active' : ''} onClick={() => setSheetState('peek')}>
-              Min
+              {labels.sidebar.min}
             </button>
             <button type="button" className={sheetState === 'half' ? 'active' : ''} onClick={() => setSheetState('half')}>
-              Half
+              {labels.sidebar.half}
             </button>
             <button type="button" className={sheetState === 'full' ? 'active' : ''} onClick={() => setSheetState('full')}>
-              Full
+              {labels.sidebar.full}
             </button>
           </div>
-          <button className="close-btn" onClick={onClose} aria-label="Close panel">
+          <button className="close-btn" onClick={onClose} aria-label={labels.sidebar.closePanel}>
             x
           </button>
         </div>
@@ -108,7 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className="sidebar-content">
         <section className="info-section location-section">
-          <h3>Selected Location</h3>
+          <h3>{labels.sidebar.selectedLocation}</h3>
           <form className="location-search" onSubmit={handleAddressSubmit}>
             <input
               className="address-input"
@@ -119,18 +123,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onChange={(event) => setAddressValue(event.target.value)}
             />
             <button className="location-search-button" type="submit" disabled={loading || !addressValue.trim()}>
-              Search
+              {labels.search}
             </button>
           </form>
-          <p className="location-meta">{coordinates}</p>
         </section>
 
         <section className="info-section">
-          <h3>Scoring Horizon</h3>
+          <h3>{labels.sidebar.scoringHorizon}</h3>
           <div className="radius-control">
             <input
               type="range"
-              min={500}
+              min={300}
               max={5000}
               step={100}
               value={radiusMeters}
@@ -138,36 +141,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
             <div className="radius-label">{(radiusMeters / 1000).toFixed(1)} km</div>
           </div>
-          <p className="radius-help">Services farther away contribute less; outside this range they score 0.</p>
         </section>
 
         <section className="info-section">
-          <h3>Accessibility Index</h3>
+          <h3>{labels.sidebar.accessibilityIndex}</h3>
           <div className="accessibility-index" style={{ backgroundColor: accessibilityColor }}>
             <div className="index-value">{accessibilityIndex.toFixed(0)}</div>
-            <div className="index-level">{accessibilityLevel.toUpperCase()}</div>
+            <div className="index-level">{accessibilityLevelLabel.toUpperCase()}</div>
           </div>
-          <p className="index-description">Category weights + distance decay, normalized to 0-100</p>
         </section>
 
         <section className="info-section">
-          <h3>Neighborhood Legend</h3>
+          <h3>{labels.sidebar.neighborhoodLegend}</h3>
           <div className="legend-item">
             <span className="legend-color" style={{ backgroundColor: '#2ecc71' }} />
-            <span>Good accessibility</span>
+            <span>{labels.sidebar.goodAccessibility}</span>
           </div>
           <div className="legend-item">
             <span className="legend-color" style={{ backgroundColor: '#f1c40f' }} />
-            <span>Medium accessibility</span>
+            <span>{labels.sidebar.mediumAccessibility}</span>
           </div>
           <div className="legend-item">
             <span className="legend-color" style={{ backgroundColor: '#e74c3c' }} />
-            <span>Bad accessibility</span>
+            <span>{labels.sidebar.badAccessibility}</span>
           </div>
         </section>
 
         <section className="info-section">
-          <h3>Services by Walking Time</h3>
+          <h3>{labels.sidebar.servicesByWalkingTime}</h3>
           <div className="distance-bands">
             <div className="band">
               <div className="band-time">5 min</div>
@@ -182,18 +183,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="band-count">{distanceBands.band15min.length}</div>
             </div>
             <div className="band">
-              <div className="band-time">Beyond</div>
+              <div className="band-time">{labels.sidebar.beyond}</div>
               <div className="band-count">{distanceBands.beyond15min.length}</div>
             </div>
           </div>
         </section>
 
         <section className="info-section">
-          <h3>Services by Category</h3>
+          <h3>{labels.sidebar.servicesByCategory}</h3>
           <div className="category-stats">
             {categories.map((cat) => (
               <div key={cat} className="category-item">
-                <span className="category-name">{cat}</span>
+                <span className="category-name">{labels.categories[cat]}</span>
                 <span className="category-count">{stats[cat]}</span>
               </div>
             ))}
@@ -201,8 +202,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </section>
 
         <section className="info-section full-height">
-          <h3>Nearby Services</h3>
-          <ServiceList services={services} />
+          <h3>{labels.sidebar.nearbyServices}</h3>
+          <ServiceList services={services} labels={labels} />
         </section>
       </div>
     </div>

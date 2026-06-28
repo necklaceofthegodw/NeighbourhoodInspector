@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import type { Language, Translation } from '../i18n';
 import type { Service, District } from '../types';
-
 import './Map.css';
 
 interface MapProps {
@@ -13,6 +13,8 @@ interface MapProps {
   selectedAddress: string | null;
   radiusMeters: number;
   loading: boolean;
+  language: Language;
+  labels: Translation;
 }
 
 const KATOWICE_COORDS: [number, number] = [50.2645, 19.0238];
@@ -30,6 +32,8 @@ export const Map: React.FC<MapProps> = ({
   selectedAddress,
   radiusMeters,
   loading,
+  language,
+  labels,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<L.Map | null>(null);
@@ -44,7 +48,6 @@ export const Map: React.FC<MapProps> = ({
     onPointSelectedRef.current = onPointSelected;
   }, [onPointSelected]);
 
-  // Initialize map
   useEffect(() => {
     if (!mapContainer.current) return;
 
@@ -54,27 +57,20 @@ export const Map: React.FC<MapProps> = ({
       L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
         subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
         maxZoom: 19,
-        attribution: 'Map data ©2026 Google',
+        attribution: 'Map data &copy; 2026 Google',
       }).addTo(map.current);
 
-      // Add empty groups
       districtLayersGroup.current.addTo(map.current);
       districtLabelsGroup.current.addTo(map.current);
       markersGroup.current.addTo(map.current);
 
-      // Map click handler
-      map.current.on('click', (e) => {
-        const { lat, lng } = e.latlng;
+      map.current.on('click', (event) => {
+        const { lat, lng } = event.latlng;
         onPointSelectedRef.current([lng, lat]);
       });
     }
-
-    return () => {
-      // Don't destroy map on unmount
-    };
   }, []);
 
-  // Render districts
   useEffect(() => {
     if (!map.current || districts.length === 0) return;
 
@@ -99,11 +95,12 @@ export const Map: React.FC<MapProps> = ({
             layer.on('mouseout', () => {
               (layer as any).setStyle({ weight: 2, fillOpacity: 0.35 });
             });
-            layer.on('click', (e: any) => {
-              if (e.originalEvent) {
-                L.DomEvent.stopPropagation(e.originalEvent);
+            layer.on('click', (event: any) => {
+              if (event.originalEvent) {
+                L.DomEvent.stopPropagation(event.originalEvent);
               }
-              const { lat, lng } = e.latlng;
+
+              const { lat, lng } = event.latlng;
               onPointSelectedRef.current([lng, lat]);
             });
           },
@@ -116,7 +113,7 @@ export const Map: React.FC<MapProps> = ({
           const label = L.marker([centroid[1], centroid[0]], {
             icon: L.divIcon({
               className: 'district-label',
-              html: `<div class="district-label-text">${district.name}</div>`,
+              html: `<div class="district-label-text">${escapeHtml(district.name)}</div>`,
               iconAnchor: [0, 0],
             }),
             interactive: false,
@@ -127,19 +124,18 @@ export const Map: React.FC<MapProps> = ({
     });
   }, [districts]);
 
-  // Render service markers
   useEffect(() => {
     if (!map.current) return;
 
     markersGroup.current.clearLayers();
 
-    const categoryStyles: Record<string, { color: string; icon: string; label: string }> = {
-      shop: { color: '#3498db', icon: '🛒', label: 'Shop' },
-      pharmacy: { color: '#e74c3c', icon: '💊', label: 'Pharmacy' },
-      restaurant: { color: '#f39c12', icon: '🍽️', label: 'Restaurant' },
-      gym: { color: '#27ae60', icon: '🏋️', label: 'Gym' },
-      school: { color: '#9b59b6', icon: '🏫', label: 'School' },
-      library: { color: '#16a085', icon: '📚', label: 'Library' },
+    const categoryStyles = {
+      shop: { color: '#3498db', icon: '🛒', label: labels.categories.shop },
+      pharmacy: { color: '#e74c3c', icon: '💊', label: labels.categories.pharmacy },
+      restaurant: { color: '#f39c12', icon: '🍽️', label: labels.categories.restaurant },
+      gym: { color: '#27ae60', icon: '🏋️', label: labels.categories.gym },
+      school: { color: '#9b59b6', icon: '🏫', label: labels.categories.school },
+      library: { color: '#16a085', icon: '📚', label: labels.categories.library },
     };
 
     services.forEach((service) => {
@@ -158,13 +154,12 @@ export const Map: React.FC<MapProps> = ({
 
       const marker = L.marker([service.coordinates[1], service.coordinates[0]], {
         icon,
-      }).bindPopup(`<strong>${service.name}</strong><br>${service.category}`);
+      }).bindPopup(`<strong>${escapeHtml(service.name)}</strong><br>${escapeHtml(style.label)}`);
 
       markersGroup.current.addLayer(marker);
     });
-  }, [services]);
+  }, [language, labels.categories, services]);
 
-  // Update selected point marker
   useEffect(() => {
     if (!map.current) return;
 
@@ -195,7 +190,6 @@ export const Map: React.FC<MapProps> = ({
     }
   }, [selectedAddress, selectedPoint]);
 
-  // Update search radius
   useEffect(() => {
     if (!map.current) return;
 
@@ -264,7 +258,7 @@ export const Map: React.FC<MapProps> = ({
   return (
     <div className="map-container">
       <div ref={mapContainer} className="map" />
-      {loading && <div className="map-loading">Loading services...</div>}
+      {loading && <div className="map-loading">{labels.mapLoadingServices}</div>}
     </div>
   );
 };

@@ -1,93 +1,96 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+import type { Translation } from '../i18n';
 import type { Service, ServiceCategory } from '../types';
-import { AccessibilityCalculator } from '../utils/accessibility-calculator';
 import './ServiceList.css';
 
 interface ServiceListProps {
   services: Service[];
+  labels: Translation;
 }
 
-export const ServiceList: React.FC<ServiceListProps> = ({ services }) => {
+const categories: Array<ServiceCategory | 'all'> = [
+  'all',
+  'shop',
+  'pharmacy',
+  'restaurant',
+  'gym',
+  'school',
+  'library',
+];
+
+const categoryIcons: Record<ServiceCategory, string> = {
+  shop: '🛍️',
+  pharmacy: '💊',
+  restaurant: '🍽️',
+  gym: '💪',
+  school: '🎓',
+  library: '📚',
+};
+
+export const ServiceList: React.FC<ServiceListProps> = ({ services, labels }) => {
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | 'all'>('all');
   const [sortBy, setSortBy] = useState<'distance' | 'name'>('distance');
 
-  const categories: Array<ServiceCategory | 'all'> = [
-    'all',
-    'shop',
-    'pharmacy',
-    'restaurant',
-    'gym',
-    'school',
-    'library',
-  ];
-
   const filteredServices = useMemo(() => {
-    let filtered = services;
-
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter((s) => s.category === selectedCategory);
-    }
+    const filtered =
+      selectedCategory === 'all'
+        ? [...services]
+        : services.filter((service) => service.category === selectedCategory);
 
     return filtered.sort((a, b) => {
       if (sortBy === 'distance') {
         return (a.distance || Infinity) - (b.distance || Infinity);
-      } else {
-        return (a.name || '').localeCompare(b.name || '');
       }
+
+      return (a.name || '').localeCompare(b.name || '');
     });
   }, [services, selectedCategory, sortBy]);
 
-  const categoryIcons: Record<ServiceCategory, string> = {
-    shop: '🛍️',
-    pharmacy: '💊',
-    restaurant: '🍽️',
-    gym: '💪',
-    school: '🎓',
-    library: '📚',
+  const formatDistance = (meters: number | undefined): string => {
+    if (meters === undefined) return labels.serviceList.notAvailable;
+    if (meters < 1000) {
+      return `${Math.round(meters)} m`;
+    }
+
+    return `${(meters / 1000).toFixed(2)} km`;
   };
 
-  /* Unused in current implementation - available for future use
-  const categoryColors: Record<ServiceCategory, string> = {
-    shop: '#3498db',
-    pharmacy: '#e74c3c',
-    restaurant: '#f39c12',
-    gym: '#27ae60',
-    school: '#9b59b6',
-    library: '#16a085',
+  const formatDuration = (seconds: number | undefined): string => {
+    if (seconds === undefined) return labels.serviceList.notAvailable;
+    const minutes = Math.round(seconds / 60);
+    if (minutes === 0) return labels.serviceList.lessThanOneMinute;
+    return `${minutes} min`;
   };
-  */
 
   return (
     <div className="service-list-container">
-      {/* Filters */}
       <div className="service-filters">
         <div className="filter-group">
-          <label>Category:</label>
+          <label>{labels.serviceList.category}</label>
           <select
             value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value as ServiceCategory | 'all')}
+            onChange={(event) => setSelectedCategory(event.target.value as ServiceCategory | 'all')}
           >
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat === 'all' ? 'All Services' : cat.charAt(0).toUpperCase() + cat.slice(1)}
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category === 'all' ? labels.serviceList.allServices : labels.categories[category]}
               </option>
             ))}
           </select>
         </div>
 
         <div className="filter-group">
-          <label>Sort by:</label>
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as 'distance' | 'name')}>
-            <option value="distance">Distance</option>
-            <option value="name">Name</option>
+          <label>{labels.serviceList.sortBy}</label>
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as 'distance' | 'name')}>
+            <option value="distance">{labels.serviceList.distance}</option>
+            <option value="name">{labels.serviceList.name}</option>
           </select>
         </div>
       </div>
 
-      {/* Services List */}
       {filteredServices.length === 0 ? (
         <div className="no-services">
-          <p>No services found in this category</p>
+          <p>{labels.serviceList.noServices}</p>
         </div>
       ) : (
         <div className="services-list">
@@ -100,29 +103,29 @@ export const ServiceList: React.FC<ServiceListProps> = ({ services }) => {
                   : service.distance && service.distance <= 1260
                     ? '15min'
                     : 'beyond';
+            const categoryLabel = labels.categories[service.category];
 
             return (
               <div key={service.id} className="service-item">
                 <div className="service-item-header">
                   <div className="service-info">
-                    <span className="service-icon">{categoryIcons[service.category]}</span>
+                    <span
+                      className="service-icon"
+                      aria-label={categoryLabel}
+                    >
+                      {categoryIcons[service.category]}
+                    </span>
                     <div className="service-details">
                       <div className="service-name">{service.name}</div>
-                      {service.address && (
-                        <div className="service-address">{service.address}</div>
-                      )}
+                      {service.address && <div className="service-address">{service.address}</div>}
                     </div>
                   </div>
                   <div className="service-distance">
-                    <div className="distance-badge">
-                      {AccessibilityCalculator.formatDistance(service.distance)}
-                    </div>
-                    <div className="duration-badge">{AccessibilityCalculator.formatDuration(service.duration)}</div>
+                    <div className="distance-badge">{formatDistance(service.distance)}</div>
+                    <div className="duration-badge">{formatDuration(service.duration)}</div>
                   </div>
                 </div>
-                <div
-                  className={`distance-band-indicator band-${distanceBand}`}
-                />
+                <div className={`distance-band-indicator band-${distanceBand}`} />
               </div>
             );
           })}

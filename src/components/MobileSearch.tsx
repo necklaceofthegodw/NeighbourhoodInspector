@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
+import type { Translation } from '../i18n';
 import './MobileSearch.css';
 
 interface MobileSearchProps {
   selectedAddress: string | null;
   loading: boolean;
   onAddressSearch: (address: string) => void | Promise<void>;
+  labels: Translation;
 }
 
 export const MobileSearch: React.FC<MobileSearchProps> = ({
   selectedAddress,
   loading,
   onAddressSearch,
+  labels,
 }) => {
   const [addressValue, setAddressValue] = useState('');
 
@@ -33,11 +36,11 @@ export const MobileSearch: React.FC<MobileSearchProps> = ({
         type="text"
         value={addressValue}
         disabled={loading}
-        placeholder="Search address in Katowice"
+        placeholder={labels.mobileSearchPlaceholder}
         onChange={(event) => setAddressValue(event.target.value)}
       />
       <button className="mobile-search-button" type="submit" disabled={loading || !addressValue.trim()}>
-        Search
+        {labels.search}
       </button>
     </form>
   );
