@@ -6,6 +6,7 @@ import { ServiceList } from './ServiceList';
 import './Sidebar.css';
 
 type SheetState = 'peek' | 'half' | 'full';
+const CATEGORIES: ServiceCategory[] = ['shop', 'pharmacy', 'restaurant', 'gym', 'school', 'library'];
 
 interface SidebarProps {
   selectedPoint: [number, number] | null;
@@ -35,8 +36,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [addressValue, setAddressValue] = useState('');
   const [sheetState, setSheetState] = useState<SheetState>('half');
 
-  const distanceBands = useMemo(() => {
-    return AccessibilityCalculator.groupByDistanceBand(services);
+  const serviceSummary = useMemo(() => {
+    const stats = Object.fromEntries(CATEGORIES.map((category) => [category, 0])) as Record<ServiceCategory, number>;
+
+    services.forEach((service) => {
+      stats[service.category] += 1;
+    });
+
+    return {
+      distanceBands: AccessibilityCalculator.groupByDistanceBand(services),
+      stats,
+    };
   }, [services]);
 
   const accessibilityLevel = AccessibilityCalculator.getAccessibilityLevel(accessibilityIndex);
@@ -58,13 +68,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   const coordinates = `${selectedPoint[1].toFixed(4)}, ${selectedPoint[0].toFixed(4)}`;
-  const categories: ServiceCategory[] = ['shop', 'pharmacy', 'restaurant', 'gym', 'school', 'library'];
-  const stats = Object.fromEntries(
-    categories.map((cat) => {
-      const count = services.filter((s) => s.category === cat).length;
-      return [cat, count];
-    })
-  );
 
   const handleAddressSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -134,7 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <input
               type="range"
               min={300}
-              max={5000}
+              max={2500}
               step={100}
               value={radiusMeters}
               onChange={(event) => onRadiusChange(Number(event.target.value))}
@@ -172,19 +175,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="distance-bands">
             <div className="band">
               <div className="band-time">5 min</div>
-              <div className="band-count">{distanceBands.band5min.length}</div>
+              <div className="band-count">{serviceSummary.distanceBands.band5min.length}</div>
             </div>
             <div className="band">
               <div className="band-time">10 min</div>
-              <div className="band-count">{distanceBands.band10min.length}</div>
+              <div className="band-count">{serviceSummary.distanceBands.band10min.length}</div>
             </div>
             <div className="band">
               <div className="band-time">15 min</div>
-              <div className="band-count">{distanceBands.band15min.length}</div>
+              <div className="band-count">{serviceSummary.distanceBands.band15min.length}</div>
             </div>
             <div className="band">
               <div className="band-time">{labels.sidebar.beyond}</div>
-              <div className="band-count">{distanceBands.beyond15min.length}</div>
+              <div className="band-count">{serviceSummary.distanceBands.beyond15min.length}</div>
             </div>
           </div>
         </section>
@@ -192,10 +195,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <section className="info-section">
           <h3>{labels.sidebar.servicesByCategory}</h3>
           <div className="category-stats">
-            {categories.map((cat) => (
+            {CATEGORIES.map((cat) => (
               <div key={cat} className="category-item">
                 <span className="category-name">{labels.categories[cat]}</span>
-                <span className="category-count">{stats[cat]}</span>
+                <span className="category-count">{serviceSummary.stats[cat]}</span>
               </div>
             ))}
           </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Language, Translation } from '../i18n';
@@ -17,12 +17,20 @@ interface MapProps {
   labels: Translation;
 }
 
+interface MapViewport {
+  bounds: L.LatLngBounds | null;
+  zoom: number;
+}
+
 const KATOWICE_COORDS: [number, number] = [50.2645, 19.0238];
 const ZOOM_LEVEL = 12;
 const MOBILE_BREAKPOINT_PX = 768;
 const MOBILE_TOP_OVERLAY_PX = 88;
 const MOBILE_BOTTOM_SHEET_RATIO = 0.58;
 const MOBILE_BOTTOM_SHEET_MAX_PX = 520;
+const ICON_MARKER_MIN_ZOOM = 15;
+const MAX_VISIBLE_ICON_MARKERS = 100;
+const MARKER_BOUNDS_PADDING_RATIO = 0.2;
 
 export const Map: React.FC<MapProps> = ({
   services,
@@ -43,6 +51,11 @@ export const Map: React.FC<MapProps> = ({
   const selectedPointMarker = useRef<L.Marker | null>(null);
   const searchRadiusCircle = useRef<L.Circle | null>(null);
   const onPointSelectedRef = useRef(onPointSelected);
+  const serviceMarkerRenderer = useRef<L.Renderer | null>(null);
+  const [viewport, setViewport] = useState<MapViewport>({
+    bounds: null,
+    zoom: ZOOM_LEVEL,
+  });
 
   useEffect(() => {
     onPointSelectedRef.current = onPointSelected;
@@ -52,7 +65,8 @@ export const Map: React.FC<MapProps> = ({
     if (!mapContainer.current) return;
 
     if (!map.current) {
-      map.current = L.map(mapContainer.current).setView(KATOWICE_COORDS, ZOOM_LEVEL);
+      map.current = L.map(mapContainer.current, { preferCanvas: true }).setView(KATOWICE_COORDS, ZOOM_LEVEL);
+      serviceMarkerRenderer.current = L.canvas({ padding: 0.5 });
 
       L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
         subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
@@ -68,6 +82,20 @@ export const Map: React.FC<MapProps> = ({
         const { lat, lng } = event.latlng;
         onPointSelectedRef.current([lng, lat]);
       });
+
+      const updateViewport = () => {
+        if (!map.current) {
+          return;
+        }
+
+        setViewport({
+          bounds: map.current.getBounds(),
+          zoom: map.current.getZoom() ?? ZOOM_LEVEL,
+        });
+      };
+
+      updateViewport();
+      map.current.on('moveend zoomend', updateViewport);
     }
   }, []);
 
@@ -138,27 +166,43 @@ export const Map: React.FC<MapProps> = ({
       library: { color: '#16a085', icon: '📚', label: labels.categories.library },
     };
 
-    services.forEach((service) => {
+    const paddedBounds = viewport.bounds?.pad(MARKER_BOUNDS_PADDING_RATIO) ?? null;
+    const visibleServices = paddedBounds
+      ? services.filter((service) => paddedBounds.contains([service.coordinates[1], service.coordinates[0]]))
+      : services;
+    const shouldUseIconMarkers =
+      viewport.zoom >= ICON_MARKER_MIN_ZOOM && visibleServices.length <= MAX_VISIBLE_ICON_MARKERS;
+
+    visibleServices.forEach((service) => {
       const style = categoryStyles[service.category] || {
         color: '#95a5a6',
         icon: '📍',
         label: service.category,
       };
 
-      const icon = L.divIcon({
-        className: 'service-marker',
-        html: `<div class="service-marker-icon" style="background-color: ${style.color};">${style.icon}</div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
-      });
+      const marker = shouldUseIconMarkers
+        ? L.marker([service.coordinates[1], service.coordinates[0]], {
+            icon: L.divIcon({
+              className: 'service-marker',
+              html: `<div class="service-marker-icon" style="background-color: ${style.color};">${style.icon}</div>`,
+              iconSize: [32, 32],
+              iconAnchor: [16, 16],
+            }),
+          })
+        : L.circleMarker([service.coordinates[1], service.coordinates[0]], {
+            renderer: serviceMarkerRenderer.current ?? undefined,
+            radius: 6,
+            color: '#ffffff',
+            weight: 2,
+            opacity: 0.95,
+            fillColor: style.color,
+            fillOpacity: 0.9,
+          });
 
-      const marker = L.marker([service.coordinates[1], service.coordinates[0]], {
-        icon,
-      }).bindPopup(`<strong>${escapeHtml(service.name)}</strong><br>${escapeHtml(style.label)}`);
-
+      marker.bindPopup(`<strong>${escapeHtml(service.name)}</strong><br>${escapeHtml(style.label)}`);
       markersGroup.current.addLayer(marker);
     });
-  }, [language, labels.categories, services]);
+  }, [language, labels.categories, services, viewport]);
 
   useEffect(() => {
     if (!map.current) return;

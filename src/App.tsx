@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Map } from './components/Map';
 import { MobileSearch } from './components/MobileSearch';
 import { Sidebar } from './components/Sidebar';
@@ -9,14 +9,26 @@ import { AccessibilityCalculator } from './utils/accessibility-calculator';
 import { katowiceDistricts } from './data/katowice-districts';
 import { generateSampleServices } from './utils/sample-data';
 import { getTranslations, type Language } from './i18n';
+import {
+  createServiceSpatialIndex,
+  haversineDistance,
+  queryServicesWithinRadius,
+  type ServiceSpatialIndex,
+} from './utils/service-spatial-index';
 import './App.css';
 
 const DEFAULT_DISTRICT_COLOR = '#95a5a6';
 const WALKING_SPEED_METERS_PER_SECOND = 1.4;
 const DEFAULT_ACCESSIBILITY_RADIUS_METERS = 2500;
+const MAX_ACCESSIBILITY_RADIUS_METERS = 2500;
+const DISTRICT_COLORING_DEBOUNCE_MS = 180;
 const DISTRICT_SAMPLE_GRID_SIZE = 7;
 const MAX_DISTRICT_SAMPLE_POINTS = 60;
 const LANGUAGE_STORAGE_KEY = 'neighbourhood-inspector-language';
+const DISTRICT_SAMPLE_POINTS = katowiceDistricts.map((district) => ({
+  id: district.id,
+  points: getSamplePointsForGeometry(district.geometry),
+}));
 
 function App() {
   const [language, setLanguage] = useState<Language>(() => getInitialLanguage());
@@ -35,6 +47,7 @@ function App() {
   const [accessibilityIndex, setAccessibilityIndex] = useState(0);
   const [radiusMeters, setRadiusMeters] = useState(DEFAULT_ACCESSIBILITY_RADIUS_METERS);
   const [lastEnrichedServices, setLastEnrichedServices] = useState<Service[]>([]);
+  const serviceIndex = useMemo(() => createServiceSpatialIndex(services), [services]);
 
   useEffect(() => {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
@@ -62,8 +75,12 @@ function App() {
   }, []);
 
   useEffect(() => {
-    setDistricts(colorDistrictsByAccessibility(katowiceDistricts, services, radiusMeters));
-  }, [radiusMeters, services]);
+    const timeoutId = window.setTimeout(() => {
+      setDistricts(colorDistrictsByAccessibility(katowiceDistricts, serviceIndex, radiusMeters));
+    }, DISTRICT_COLORING_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [radiusMeters, serviceIndex]);
 
   // Handle point selection
   const filterServicesByRadius = useCallback((servicesToFilter: Service[], radius: number) => {
@@ -102,7 +119,8 @@ function App() {
     }
 
     try {
-      const enrichedServices = enrichServicesWithStraightLineDistances(point, services);
+      const candidateServices = queryServicesWithinRadius(serviceIndex, point, MAX_ACCESSIBILITY_RADIUS_METERS);
+      const enrichedServices = enrichServicesWithStraightLineDistances(point, candidateServices);
       setLastEnrichedServices(enrichedServices);
 
       const validServices = filterServicesByRadius(enrichedServices, radiusMeters);
@@ -124,7 +142,16 @@ function App() {
         error: t.distanceCalculationError,
       }));
     }
-  }, [filterServicesByRadius, language, radiusMeters, services, t.distanceCalculationError, t.fallbackAddress, t.loadingAddress]);
+  }, [
+    filterServicesByRadius,
+    language,
+    radiusMeters,
+    serviceIndex,
+    services,
+    t.distanceCalculationError,
+    t.fallbackAddress,
+    t.loadingAddress,
+  ]);
 
   const handleAddressSearch = useCallback(async (address: string) => {
     const trimmedAddress = address.trim();
@@ -234,10 +261,10 @@ function getInitialLanguage(): Language {
 
 function colorDistrictsByAccessibility(
   districtsToColor: District[],
-  servicesToUse: Service[],
+  serviceIndex: ServiceSpatialIndex,
   radiusMeters: number
 ): District[] {
-  if (servicesToUse.length === 0) {
+  if (serviceIndex.cells.size === 0) {
     return districtsToColor.map((district) => ({
       ...district,
       accessibilityIndex: 0,
@@ -248,8 +275,10 @@ function colorDistrictsByAccessibility(
   }
 
   return districtsToColor.map((district) => {
-    const samplePoints = getSamplePointsForGeometry(district.geometry);
-    const sampleResults = samplePoints.map((point) => calculateAccessibilityAtPoint(point, servicesToUse, radiusMeters));
+    const samplePoints = DISTRICT_SAMPLE_POINTS.find((sample) => sample.id === district.id)?.points ?? [
+      getCenterOfGeometry(district.geometry),
+    ];
+    const sampleResults = samplePoints.map((point) => calculateAccessibilityAtPoint(point, serviceIndex, radiusMeters));
     const accessibilityIndex = average(sampleResults.map((result) => result.accessibilityIndex));
     const accessibilityLevel = AccessibilityCalculator.getAccessibilityLevel(accessibilityIndex);
     const avgServiceCount = average(sampleResults.map((result) => result.serviceCount));
@@ -267,19 +296,19 @@ function colorDistrictsByAccessibility(
 
 function calculateAccessibilityAtPoint(
   point: [number, number],
-  servicesToUse: Service[],
+  serviceIndex: ServiceSpatialIndex,
   radiusMeters: number
 ): { accessibilityIndex: number; serviceCount: number; avgDistance: number } {
-  const nearbyServices = servicesToUse
-    .map((service) => {
-      const distance = haversineDistance(point, service.coordinates);
-      return {
-        ...service,
-        distance,
-        straightDistance: distance,
-      };
-    })
-    .filter((service) => service.distance <= radiusMeters);
+  const nearbyServices = queryServicesWithinRadius(serviceIndex, point, radiusMeters).map((service) => {
+    const distance = haversineDistance(point, service.coordinates);
+
+    return {
+      ...service,
+      distance,
+      straightDistance: distance,
+      duration: distance / WALKING_SPEED_METERS_PER_SECOND,
+    };
+  });
 
   const totalDistance = nearbyServices.reduce((sum, service) => sum + (service.distance ?? 0), 0);
 
@@ -440,19 +469,6 @@ function dedupePoints(points: [number, number][]): [number, number][] {
     seen.add(key);
     return true;
   });
-}
-
-function haversineDistance(from: [number, number], to: [number, number]): number {
-  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
-  const [lon1, lat1] = from;
-  const [lon2, lat2] = to;
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return 6371000 * c;
 }
 
 function enrichServicesWithStraightLineDistances(point: [number, number], servicesToUse: Service[]): Service[] {

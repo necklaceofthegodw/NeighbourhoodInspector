@@ -12,6 +12,7 @@ const CATEGORY_WEIGHTS: Record<ServiceCategory, number> = {
 const DEFAULT_MAX_DISTANCE_METERS = 2500;
 const DISTANCE_DECAY_BETA_PER_KM = 1.2;
 const DUPLICATE_SERVICE_WEIGHTS = [1, 0.5, 0.25];
+const SERVICE_CATEGORIES = Object.keys(CATEGORY_WEIGHTS) as ServiceCategory[];
 
 export class AccessibilityCalculator {
   /**
@@ -30,26 +31,23 @@ export class AccessibilityCalculator {
     );
     if (validServices.length === 0) return 0;
 
-    const totalWeight = Object.values(CATEGORY_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
+    const totalWeight = SERVICE_CATEGORIES.reduce((sum, category) => sum + CATEGORY_WEIGHTS[category], 0);
+    const nearestByCategory = createNearestBuckets();
 
-    const weightedScore = Object.entries(CATEGORY_WEIGHTS).reduce((sum, [category, categoryWeight]) => {
-      const categoryServices = validServices
-        .filter((service) => service.category === category)
-        .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))
-        .slice(0, DUPLICATE_SERVICE_WEIGHTS.length);
+    validServices.forEach((service) => {
+      insertNearestService(nearestByCategory[service.category], service);
+    });
 
+    const weightedScore = SERVICE_CATEGORIES.reduce((sum, category) => {
       const categoryContribution = Math.min(
-        categoryServices.reduce((categorySum, service, index) => {
+        nearestByCategory[category].reduce((categorySum, service, index) => {
           const duplicateWeight = DUPLICATE_SERVICE_WEIGHTS[index] ?? 0;
-          return categorySum + duplicateWeight * this.getDistanceDecay(
-            service.distance ?? Infinity,
-            maxDistanceMeters
-          );
+          return categorySum + duplicateWeight * this.getDistanceDecay(service.distance ?? Infinity, maxDistanceMeters);
         }, 0),
         1
       );
 
-      return sum + categoryWeight * categoryContribution;
+      return sum + CATEGORY_WEIGHTS[category] * categoryContribution;
     }, 0);
 
     return (weightedScore / totalWeight) * 100;
@@ -83,16 +81,39 @@ export class AccessibilityCalculator {
     const band10minDistance = 10 * 60 * 1.4; // ~840m
     const band15minDistance = 15 * 60 * 1.4; // ~1260m
 
-    return {
-      band5min: services.filter((s) => s.distance !== undefined && s.distance <= band5minDistance),
-      band10min: services.filter(
-        (s) => s.distance !== undefined && s.distance > band5minDistance && s.distance <= band10minDistance
-      ),
-      band15min: services.filter(
-        (s) => s.distance !== undefined && s.distance > band10minDistance && s.distance <= band15minDistance
-      ),
-      beyond15min: services.filter((s) => s.distance !== undefined && s.distance > band15minDistance),
+    const bands = {
+      band5min: [] as Service[],
+      band10min: [] as Service[],
+      band15min: [] as Service[],
+      beyond15min: [] as Service[],
     };
+
+    services.forEach((service) => {
+      const distance = service.distance;
+
+      if (distance === undefined) {
+        return;
+      }
+
+      if (distance <= band5minDistance) {
+        bands.band5min.push(service);
+        return;
+      }
+
+      if (distance <= band10minDistance) {
+        bands.band10min.push(service);
+        return;
+      }
+
+      if (distance <= band15minDistance) {
+        bands.band15min.push(service);
+        return;
+      }
+
+      bands.beyond15min.push(service);
+    });
+
+    return bands;
   }
 
   /**
@@ -147,5 +168,34 @@ export class AccessibilityCalculator {
       bad: '#e74c3c',
     };
     return colors[level] || '#95a5a6';
+  }
+}
+
+function createNearestBuckets(): Record<ServiceCategory, Service[]> {
+  return {
+    shop: [],
+    pharmacy: [],
+    restaurant: [],
+    gym: [],
+    school: [],
+    library: [],
+  };
+}
+
+function insertNearestService(bucket: Service[], service: Service): void {
+  const distance = service.distance ?? Infinity;
+  const insertIndex = bucket.findIndex((item) => distance < (item.distance ?? Infinity));
+
+  if (insertIndex === -1) {
+    if (bucket.length < DUPLICATE_SERVICE_WEIGHTS.length) {
+      bucket.push(service);
+    }
+    return;
+  }
+
+  bucket.splice(insertIndex, 0, service);
+
+  if (bucket.length > DUPLICATE_SERVICE_WEIGHTS.length) {
+    bucket.length = DUPLICATE_SERVICE_WEIGHTS.length;
   }
 }
